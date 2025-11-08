@@ -207,14 +207,27 @@ graph LR
     </div>
 
     <div class="section">
-        <h2>Integration with x402</h2>
-        <p>Facilitators can auto-detect CascadePay vaults by checking if a payment destination is a token account with a SplitConfig PDA as authority. When detected, the facilitator bundles the transfer and execute_split instructions atomically.</p>
+        <h2>For x402 Facilitators</h2>
+        <p>Auto-detect split vaults and bundle payment + distribution atomically:</p>
 
-        <h3>Detection Flow</h3>
-        <pre>1. Check if destination is token account
-2. Verify authority is SplitConfig PDA
-3. Bundle: transfer() + execute_split()
-4. Submit atomic transaction</pre>
+        <pre>import { detectSplitVault } from "@cascadepay/sdk";
+
+// Detect if destination is a CascadePay vault
+const result = await detectSplitVault(
+  destination, connection, programId
+);
+
+if (result.isSplitVault) {
+  // Bundle: user transfer + execute_split
+  const tx = new Transaction()
+    .add(transferInstruction)
+    .add(executeSplitInstruction);
+
+  // User signs once, both happen atomically
+  await sendTransaction(tx);
+}</pre>
+
+        <p><strong>Result:</strong> Seamless UX - user pays once, funds split instantly.</p>
     </div>
 
     <div class="section">
@@ -266,13 +279,18 @@ graph LR
     </div>
 
     <div class="section">
-        <h2>Status</h2>
-        <p>In development. Pre-launch testing phase.</p>
+        <h2>Deployment</h2>
+        <p><strong>Network:</strong> Solana Devnet</p>
+        <p><strong>Program ID:</strong> <code>Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2</code></p>
+        <p><strong>NPM Package:</strong> <code>npm install @cascadepay/sdk</code></p>
+        <p><strong>Status:</strong> Deployed & tested. Ready for integration.</p>
     </div>
 
     <div class="links">
         <a href="https://github.com/tenequm/cascadepay">GitHub</a>
+        <a href="https://www.npmjs.com/package/@cascadepay/sdk">NPM Package</a>
         <a href="https://github.com/tenequm/cascadepay/blob/main/docs/specification.md">Specification</a>
+        <a href="https://x.com/cascadepay">Twitter</a>
         <a href="mailto:hello@cascadepay.io">Contact</a>
     </div>
 </body>

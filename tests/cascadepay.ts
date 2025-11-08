@@ -427,4 +427,216 @@ describe("cascadepay E2E Tests", () => {
 
     console.log("✅ All tests passed successfully!\n");
   });
+
+  it("Test 4: Build execute split instruction (SDK)", async () => {
+    console.log("🧪 Test 4: Testing buildExecuteSplitInstruction()...\n");
+
+    // Import SDK
+    const { createCascadepayClient } = await import("../sdk/dist/index.mjs");
+
+    // Load IDL
+    const idl = program.idl;
+    const sdk = await createCascadepayClient(
+      provider.connection,
+      provider.wallet as anchor.Wallet,
+      idl
+    );
+
+    console.log("Building execute split instruction...");
+    const instruction = await sdk.buildExecuteSplitInstruction(
+      splitConfigPda,
+      provider.wallet.publicKey
+    );
+
+    console.log("\n📋 Instruction Details:");
+    console.log(`  - Program ID: ${instruction.programId.toString()}`);
+    console.log(`  - Accounts: ${instruction.keys.length}`);
+    console.log(`  - Data length: ${instruction.data.length} bytes`);
+
+    // Verify instruction structure
+    assert.equal(
+      instruction.programId.toString(),
+      program.programId.toString(),
+      "Program ID should match"
+    );
+    assert.isAbove(instruction.keys.length, 0, "Should have accounts");
+    assert.isAbove(instruction.data.length, 0, "Should have instruction data");
+
+    console.log("\n✅ buildExecuteSplitInstruction() works correctly!\n");
+  });
+
+  it("Test 5: Atomic bundled transaction (CRITICAL)", async () => {
+    console.log("🧪 Test 5: Testing atomic bundled transaction...\n");
+    console.log("This is THE KEY TEST for facilitator integration!\n");
+
+    // Import SDK
+    const { createCascadepayClient } = await import("../sdk/dist/index.mjs");
+
+    const idl = program.idl;
+    const sdk = await createCascadepayClient(
+      provider.connection,
+      provider.wallet as anchor.Wallet,
+      idl
+    );
+
+    // Fund authority with more tokens for this test
+    const authorityAddress = toAddress(provider.wallet.publicKey);
+    let authorityAta: Address;
+    try {
+      [authorityAta] = await findAssociatedTokenPda({
+        mint: mintAddress,
+        owner: authorityAddress,
+        tokenProgram: TOKEN_PROGRAM_ADDRESS,
+      });
+      await fetchToken(rpc, authorityAta);
+    } catch {
+      authorityAta = await createATA(feePayer, mintAddress, authorityAddress);
+    }
+
+    const testAmount = 500_000_000n; // 500 tokens
+    console.log(`Minting ${testAmount} tokens for bundled test...`);
+    await mintTokens(feePayer, mintAddress, authorityAta, testAmount);
+    console.log("✓ Tokens minted\n");
+
+    // Get balances before
+    const r1Before = await getTokenBalance(recipient1AtaAddress);
+    const r2Before = await getTokenBalance(recipient2AtaAddress);
+    const protocolBefore = await getTokenBalance(protocolAtaAddress);
+
+    console.log("Balances before bundled transaction:");
+    console.log(`  - Recipient 1: ${r1Before}`);
+    console.log(`  - Recipient 2: ${r2Before}`);
+    console.log(`  - Protocol: ${protocolBefore}\n`);
+
+    // Build bundled transaction
+    console.log("🎯 Building bundled transaction...");
+    const bundledTx = await sdk.buildBundledTransaction(
+      splitConfigPda,
+      testAmount,
+      provider.wallet.publicKey
+    );
+
+    console.log("Bundled transaction created!");
+    console.log(`  - Instructions: ${bundledTx.instructions.length}`);
+    assert.equal(bundledTx.instructions.length, 2, "Should have exactly 2 instructions");
+    console.log("  - Instruction 1: Transfer tokens to vault");
+    console.log("  - Instruction 2: Execute split distribution\n");
+
+    // Set recent blockhash and send
+    console.log("Sending bundled transaction (atomic execution)...");
+    bundledTx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+    bundledTx.feePayer = provider.wallet.publicKey;
+
+    const signature = await provider.sendAndConfirm(bundledTx);
+    console.log(`✅ Bundled transaction confirmed!`);
+    console.log(`   Signature: ${signature}\n`);
+
+    // Verify balances after
+    console.log("Verifying atomic execution results...");
+    const r1After = await getTokenBalance(recipient1AtaAddress);
+    const r2After = await getTokenBalance(recipient2AtaAddress);
+    const protocolAfter = await getTokenBalance(protocolAtaAddress);
+    const vaultAfter = await getTokenBalance(vaultAtaAddress);
+
+    const r1Received = Number(r1After) - Number(r1Before);
+    const r2Received = Number(r2After) - Number(r2Before);
+    const protocolReceived = Number(protocolAfter) - Number(protocolBefore);
+
+    console.log("\n📊 Atomic Distribution Results:");
+    console.log(`  - Recipient 1 received: ${r1Received} tokens (~247.5M expected)`);
+    console.log(`  - Recipient 2 received: ${r2Received} tokens (~247.5M expected)`);
+    console.log(`  - Protocol received: ${protocolReceived} tokens (~5M + dust expected)`);
+    console.log(`  - Vault remaining: ${vaultAfter} (should be 0)\n`);
+
+    // Assertions
+    assert.equal(Number(vaultAfter), 0, "Vault should be completely drained");
+    assert.isAbove(r1Received, 240_000_000, "Recipient 1 should receive ~49.5%");
+    assert.isAbove(r2Received, 240_000_000, "Recipient 2 should receive ~49.5%");
+    assert.isAbove(protocolReceived, 4_000_000, "Protocol should receive ~1%");
+
+    const totalDistributed = r1Received + r2Received + protocolReceived;
+    assert.equal(totalDistributed, Number(testAmount), "Total should match input amount");
+
+    console.log("✅ ATOMIC BUNDLING WORKS!");
+    console.log("   Both transfer and split executed in ONE transaction\n");
+  });
+
+  it("Test 6: Build claim unclaimed instruction (SDK)", async () => {
+    console.log("🧪 Test 6: Testing buildClaimUnclaimedInstruction()...\n");
+
+    const { createCascadepayClient } = await import("../sdk/dist/index.mjs");
+
+    const idl = program.idl;
+    const sdk = await createCascadepayClient(
+      provider.connection,
+      provider.wallet as anchor.Wallet,
+      idl
+    );
+
+    console.log("Building claim unclaimed instruction...");
+    const instruction = await sdk.buildClaimUnclaimedInstruction(
+      splitConfigPda,
+      toPublicKey(recipient1Signer.address)
+    );
+
+    console.log("\n📋 Instruction Details:");
+    console.log(`  - Program ID: ${instruction.programId.toString()}`);
+    console.log(`  - Accounts: ${instruction.keys.length}`);
+    console.log(`  - Data length: ${instruction.data.length} bytes`);
+
+    // Verify instruction structure
+    assert.equal(
+      instruction.programId.toString(),
+      program.programId.toString(),
+      "Program ID should match"
+    );
+    assert.isAbove(instruction.keys.length, 0, "Should have accounts");
+    assert.isAbove(instruction.data.length, 0, "Should have instruction data");
+
+    console.log("\n✅ buildClaimUnclaimedInstruction() works correctly!\n");
+  });
+
+  it("Test 7: Final verification - All SDK methods", async () => {
+    console.log("🧪 Test 7: Final SDK verification...\n");
+
+    const { createCascadepayClient } = await import("../sdk/dist/index.mjs");
+
+    const idl = program.idl;
+    const sdk = await createCascadepayClient(
+      provider.connection,
+      provider.wallet as anchor.Wallet,
+      idl
+    );
+
+    // Test getSplitConfig
+    console.log("Testing getSplitConfig()...");
+    const config = await sdk.getSplitConfig(splitConfigPda);
+    assert.equal(config.recipients.length, 2, "Should have 2 recipients");
+    assert.equal(config.version, 1, "Version should be 1");
+    console.log("✓ getSplitConfig() works\n");
+
+    // Test deriveSplitConfigPDA
+    console.log("Testing deriveSplitConfigPDA()...");
+    const derivedPDA = sdk.deriveSplitConfigPDA(
+      provider.wallet.publicKey,
+      toPublicKey(mintAddress)
+    );
+    assert.equal(
+      derivedPDA.toString(),
+      splitConfigPda.toString(),
+      "Derived PDA should match"
+    );
+    console.log("✓ deriveSplitConfigPDA() works\n");
+
+    // Test percentagesToShares
+    console.log("Testing percentagesToShares()...");
+    const { Cascadepay } = await import("../sdk/dist/index.mjs");
+    const shares = Cascadepay.percentagesToShares([49.5, 49.5]);
+    assert.equal(shares[0], 4950, "First share should be 4950 bps");
+    assert.equal(shares[1], 4950, "Second share should be 4950 bps");
+    console.log("✓ percentagesToShares() works\n");
+
+    console.log("✅ All SDK methods verified!\n");
+    console.log("🎉 TRANSACTION BUNDLING FULLY TESTED AND WORKING!\n");
+  });
 });

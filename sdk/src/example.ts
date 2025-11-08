@@ -101,10 +101,10 @@ async function main() {
     }
 
     // ============================================================================
-    // Example 4: x402 Facilitator Integration (PayAI, Coinbase CDP)
+    // Example 4: x402 Facilitator Integration - Bundled Transaction
     // ============================================================================
 
-    console.log("🔍 Example 4: Auto-detecting split vault\n");
+    console.log("🔍 Example 4: Facilitator bundled transaction\n");
 
     const paymentDestination = config.vault; // User wants to pay this address
 
@@ -114,13 +114,33 @@ async function main() {
       programId
     );
 
-    if (detection.isSplitVault) {
+    if (detection.isSplitVault && detection.splitConfig) {
       console.log("✅ Detected cascadepay vault!");
-      console.log(`   Split config: ${detection.splitConfig?.toString()}`);
-      console.log("\n   💡 Facilitator can now bundle:");
-      console.log("      1. Transfer tokens to vault");
-      console.log("      2. Execute split distribution");
-      console.log("      → User signs once, both happen atomically\n");
+      console.log(`   Split config: ${detection.splitConfig.toString()}\n`);
+
+      // Build bundled transaction: [transfer, execute_split]
+      const bundledTx = await sdk.buildBundledTransaction(
+        detection.splitConfig,
+        1_000_000n, // 1 USDC (6 decimals)
+        wallet.publicKey
+      );
+
+      console.log("🎯 Bundled transaction created!");
+      console.log(`   Instructions: ${bundledTx.instructions.length}`);
+      console.log("   1. Transfer 1 USDC to vault");
+      console.log("   2. Execute split distribution");
+      console.log("   → Both happen atomically - all or nothing\n");
+
+      // Facilitator would now:
+      // 1. Set recent blockhash
+      // 2. Get user signature
+      // 3. Send transaction
+      // Example:
+      // bundledTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+      // bundledTx.feePayer = wallet.publicKey;
+      // await wallet.signTransaction(bundledTx);
+      // await connection.sendRawTransaction(bundledTx.serialize());
+
     } else {
       console.log("ℹ️  Regular payment address, no split\n");
     }
@@ -153,8 +173,9 @@ async function main() {
       const updateTx = await sdk.updateSplitConfig(configPDA, newRecipients);
       console.log("✅ Split config updated!");
       console.log(`   Transaction: ${updateTx}\n`);
-    } catch (error: any) {
-      console.log("⚠️  Update failed:", error.message);
+    } catch (error) {
+      const err = error as Error;
+      console.log("⚠️  Update failed:", err.message);
       console.log("   (Vault must be empty to update)\n");
     }
 
@@ -169,16 +190,18 @@ async function main() {
       console.log("✅ Split config closed!");
       console.log(`   Transaction: ${closeTx}`);
       console.log("   Rent reclaimed to authority\n");
-    } catch (error: any) {
-      console.log("⚠️  Close failed:", error.message);
+    } catch (error) {
+      const err = error as Error;
+      console.log("⚠️  Close failed:", err.message);
       console.log("   (Vault must be empty and no unclaimed funds)\n");
     }
 
-  } catch (error: any) {
-    console.error("\n❌ Error:", error.message);
-    if (error.logs) {
+  } catch (error) {
+    const err = error as Error & { logs?: string[] };
+    console.error("\n❌ Error:", err.message);
+    if (err.logs) {
       console.error("\nProgram logs:");
-      error.logs.forEach((log: string) => console.error(`   ${log}`));
+      err.logs.forEach((log: string) => console.error(`   ${log}`));
     }
   }
 

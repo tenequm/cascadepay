@@ -25,6 +25,10 @@ type PublicKey = anchor.web3.PublicKey;
 type Keypair = anchor.web3.Keypair;
 type Connection = anchor.web3.Connection;
 
+// Export transaction types for facilitator integration (via Anchor re-export)
+export type Transaction = anchor.web3.Transaction;
+export type TransactionInstruction = anchor.web3.TransactionInstruction;
+
 // Types matching on-chain program
 export interface Recipient {
   address: PublicKey;
@@ -180,14 +184,14 @@ export class Cascadepay {
    * @returns Transaction signature
    */
   async executeSplit(splitConfigPDA: PublicKey): Promise<string> {
-    const config = await (this.program.account as any)['splitConfig'].fetch(splitConfigPDA);
+    const config = await this.getSplitConfig(splitConfigPDA);
 
     const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
     const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
 
     // Get recipient ATAs
     const recipientAtas = await Promise.all(
-      config.recipients.map((r: any) =>
+      config.recipients.map(r =>
         findAssociatedTokenPda({
           mint: toAddress(config.mint),
           owner: toAddress(r.address),
@@ -236,7 +240,7 @@ export class Cascadepay {
     splitConfigPDA: PublicKey,
     recipient: Keypair
   ): Promise<string> {
-    const config = await (this.program.account as any)['splitConfig'].fetch(splitConfigPDA);
+    const config = await this.getSplitConfig(splitConfigPDA);
 
     const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
     const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
@@ -269,16 +273,27 @@ export class Cascadepay {
    * @returns Split configuration data
    */
   async getSplitConfig(splitConfigPDA: PublicKey): Promise<SplitConfig> {
-    const config = await (this.program.account as any)['splitConfig'].fetch(splitConfigPDA);
+    interface RawSplitConfig {
+      authority: PublicKey;
+      mint: PublicKey;
+      vault: PublicKey;
+      recipients: Recipient[];
+      unclaimedAmounts: UnclaimedAmount[];
+      bump: number;
+      version: number;
+    }
+
+    const splitConfigAccount = this.program.account['splitConfig'];
+    const config = await splitConfigAccount.fetch(splitConfigPDA) as RawSplitConfig;
 
     return {
-      authority: config.authority as PublicKey,
-      mint: config.mint as PublicKey,
-      vault: config.vault as PublicKey,
-      recipients: config.recipients as Recipient[],
-      unclaimedAmounts: config.unclaimedAmounts as UnclaimedAmount[],
-      bump: config.bump as number,
-      version: config.version as number,
+      authority: config.authority,
+      mint: config.mint,
+      vault: config.vault,
+      recipients: config.recipients,
+      unclaimedAmounts: config.unclaimedAmounts,
+      bump: config.bump,
+      version: config.version,
     };
   }
 
@@ -298,7 +313,7 @@ export class Cascadepay {
       throw new Error("Recipients must sum to 9900 basis points (99%)");
     }
 
-    const config = await (this.program.account as any)['splitConfig'].fetch(splitConfigPDA);
+    const config = await this.getSplitConfig(splitConfigPDA);
 
     const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
 
@@ -337,7 +352,7 @@ export class Cascadepay {
    * @returns Transaction signature
    */
   async closeSplitConfig(splitConfigPDA: PublicKey): Promise<string> {
-    const config = await (this.program.account as any)['splitConfig'].fetch(splitConfigPDA);
+    const config = await this.getSplitConfig(splitConfigPDA);
 
     const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
     const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
@@ -382,6 +397,171 @@ export class Cascadepay {
 
     return percentages.map(pct => Math.round((pct / 100) * 10000));
   }
+
+  /**
+   * Builds execute_split instruction WITHOUT sending it
+   * Facilitators use this to bundle with transfer instruction
+   *
+   * @param splitConfigPDA - Split configuration address
+   * @param executor - Optional executor (defaults to provider wallet)
+   * @returns TransactionInstruction ready to add to Transaction
+   */
+  async buildExecuteSplitInstruction(
+    splitConfigPDA: PublicKey,
+    executor?: PublicKey
+  ): Promise<anchor.web3.TransactionInstruction> {
+    const config = await this.getSplitConfig(splitConfigPDA);
+
+    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+    const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
+
+    // Get recipient ATAs
+    const recipientAtas = await Promise.all(
+      config.recipients.map(r =>
+        findAssociatedTokenPda({
+          mint: toAddress(config.mint),
+          owner: toAddress(r.address),
+          tokenProgram: tokenProgramAddr,
+        }).then(([ata]) => toPublicKey(ata))
+      )
+    );
+
+    // Protocol wallet
+    const protocolWallet = new anchor.web3.PublicKey("Fo2EYEYbnJTnBnbAgnjnG1c2fixpFn1vSUUHSeoHhRP");
+    const [protocolAta] = await findAssociatedTokenPda({
+      mint: toAddress(config.mint),
+      owner: toAddress(protocolWallet),
+      tokenProgram: tokenProgramAddr,
+    });
+
+    const executorKey = executor || this.provider.wallet.publicKey;
+
+    // Use .instruction() instead of .rpc() to get TransactionInstruction
+    return await this.program.methods
+      .executeSplit()
+      .accounts({
+        splitConfig: splitConfigPDA,
+        vault: config.vault,
+        mint: config.mint,
+        protocolFeeRecipient: toPublicKey(protocolAta),
+        executor: executorKey,
+        tokenProgram: tokenProgramPubkey,
+      })
+      .remainingAccounts(
+        recipientAtas.map(ata => ({
+          pubkey: ata,
+          isSigner: false,
+          isWritable: true,
+        }))
+      )
+      .instruction();
+  }
+
+  /**
+   * Builds claim_unclaimed instruction WITHOUT sending it
+   *
+   * @param splitConfigPDA - Split configuration address
+   * @param recipient - Recipient public key (who has unclaimed funds)
+   * @returns TransactionInstruction ready to add to Transaction
+   */
+  async buildClaimUnclaimedInstruction(
+    splitConfigPDA: PublicKey,
+    recipient: PublicKey
+  ): Promise<anchor.web3.TransactionInstruction> {
+    const config = await this.getSplitConfig(splitConfigPDA);
+
+    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+    const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
+
+    const [recipientAta] = await findAssociatedTokenPda({
+      mint: toAddress(config.mint),
+      owner: toAddress(recipient),
+      tokenProgram: tokenProgramAddr,
+    });
+
+    // Use .instruction() instead of .rpc()
+    return await this.program.methods
+      .claimUnclaimed()
+      .accounts({
+        recipient,
+        splitConfig: splitConfigPDA,
+        vault: config.vault,
+        mint: config.mint,
+        recipientAta: toPublicKey(recipientAta),
+        tokenProgram: tokenProgramPubkey,
+      })
+      .instruction();
+  }
+
+  /**
+   * Builds bundled transaction: [transfer to vault, execute_split]
+   * This is the PRIMARY facilitator integration method
+   *
+   * @param splitConfigPDA - Split configuration address
+   * @param transferAmount - Amount to transfer in token base units (e.g., lamports for SOL, smallest unit for tokens)
+   * @param payer - Who's sending the payment
+   * @param executor - Optional executor for the split (defaults to payer)
+   * @returns Complete Transaction ready to sign and send (atomic execution)
+   */
+  async buildBundledTransaction(
+    splitConfigPDA: PublicKey,
+    transferAmount: bigint,
+    payer: PublicKey,
+    executor?: PublicKey
+  ): Promise<anchor.web3.Transaction> {
+    const config = await this.getSplitConfig(splitConfigPDA);
+    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+
+    // Get payer's ATA
+    const [payerAta] = await findAssociatedTokenPda({
+      mint: toAddress(config.mint),
+      owner: toAddress(payer),
+      tokenProgram: tokenProgramAddr,
+    });
+
+    // Fetch mint decimals for transfer_checked
+    const mintInfo = await this.provider.connection.getAccountInfo(config.mint);
+    if (!mintInfo) {
+      throw new Error(`Mint ${config.mint.toString()} does not exist`);
+    }
+    const decimals = mintInfo.data[44];
+
+    // Build transfer instruction using @solana-program/token
+    const { getTransferCheckedInstruction } = await import("@solana-program/token");
+    const transferIxKit = getTransferCheckedInstruction({
+      source: payerAta, // Already an Address from findAssociatedTokenPda
+      mint: toAddress(config.mint),
+      destination: toAddress(config.vault),
+      authority: toAddress(payer), // Owner/delegate of source account
+      amount: transferAmount,
+      decimals,
+    });
+
+    // Convert Kit instruction to Anchor TransactionInstruction
+    const transferIx = new anchor.web3.TransactionInstruction({
+      keys: transferIxKit.accounts.map(acc => ({
+        pubkey: toPublicKey(acc.address),
+        isSigner: acc.role === 2 || acc.role === 3,
+        isWritable: acc.role === 1 || acc.role === 3,
+      })),
+      programId: toPublicKey(transferIxKit.programAddress),
+      data: Buffer.from(transferIxKit.data),
+    });
+
+    // Build execute split instruction
+    const executeSplitIx = await this.buildExecuteSplitInstruction(
+      splitConfigPDA,
+      executor || payer
+    );
+
+    // Bundle atomically
+    const transaction = new anchor.web3.Transaction()
+      .add(transferIx)
+      .add(executeSplitIx);
+
+    return transaction;
+  }
+
 }
 
 /**
@@ -420,7 +600,13 @@ export async function detectSplitVault(
     const authority = new anchor.web3.PublicKey(authorityBytes);
 
     // Try to fetch split config account at authority address
-    const provider = new AnchorProvider(connection, {} as any, { commitment: "confirmed" });
+    // Create minimal wallet for read-only operations
+    const wallet: anchor.Wallet = {
+      publicKey: anchor.web3.PublicKey.default,
+      signTransaction: async () => { throw new Error("Read-only wallet"); },
+      signAllTransactions: async () => { throw new Error("Read-only wallet"); },
+    };
+    const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
 
     // Fetch program IDL from chain
     const idl = await Program.fetchIdl(programId, provider);
@@ -429,7 +615,12 @@ export async function detectSplitVault(
     const program = new Program(idl, provider);
 
     try {
-      const config = await (program.account as any)['splitConfig'].fetch(authority);
+      interface RawSplitConfig {
+        vault: PublicKey;
+      }
+
+      const splitConfigAccount = program.account['splitConfig'];
+      const config = await splitConfigAccount.fetch(authority) as RawSplitConfig;
 
       // Verify it's actually a split config by checking if vault matches destination
       if (config.vault.equals(destination)) {

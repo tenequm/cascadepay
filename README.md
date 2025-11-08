@@ -122,6 +122,45 @@ $100 payment → $9 platform + $90 merchant + $1 protocol
 
 ---
 
+## For x402 Facilitators (PayAI, Coinbase CDP)
+
+### Auto-detect and bundle atomically
+
+```typescript
+import { detectSplitVault } from "@cascadepay/sdk";
+import { Transaction } from "@solana/web3.js";
+
+// Detect if payment destination is a CascadePay vault
+const result = await detectSplitVault(
+  paymentDestination,
+  connection,
+  new PublicKey("Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2")
+);
+
+if (result.isSplitVault) {
+  // Build atomic transaction: transfer + execute_split
+  const transferIx = createTransferInstruction(
+    userTokenAccount,
+    result.splitConfig.vault,  // CascadePay vault
+    user.publicKey,
+    amount
+  );
+
+  const splitIx = await sdk.buildExecuteSplitInstruction(result.splitConfig);
+
+  const tx = new Transaction()
+    .add(transferIx)   // User payment
+    .add(splitIx);     // Instant distribution
+
+  // User signs once → both execute atomically
+  await sendAndConfirm(tx);
+}
+```
+
+**Result:** Seamless UX - user pays once, funds split instantly.
+
+---
+
 ## Use Cases
 
 ### 🛒 Marketplaces
@@ -233,6 +272,7 @@ See [**SDK Documentation**](sdk/README.md) for comprehensive API reference.
 
 - `createSplitConfig(params)` - Create new split configuration
 - `executeSplit(splitConfigPDA)` - Execute payment distribution
+- `buildExecuteSplitInstruction(splitConfigPDA)` - Build execute instruction for atomic bundling
 - `getSplitConfig(splitConfigPDA)` - Fetch configuration
 - `claimUnclaimed(splitConfigPDA, recipient)` - Claim failed payments
 - `updateSplitConfig(splitConfigPDA, newRecipients)` - Update recipients
@@ -245,8 +285,10 @@ See [**SDK Documentation**](sdk/README.md) for comprehensive API reference.
 
 - 📖 **[Full Specification](docs/specification.md)** - Protocol details
 - 📦 **[SDK README](sdk/README.md)** - TypeScript SDK documentation
+- 📦 **[NPM Package](https://www.npmjs.com/package/@cascadepay/sdk)** - Install SDK
 - 🔗 **[Solscan (Devnet)](https://solscan.io/account/Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2?cluster=devnet)** - View on-chain program
 - 🌐 **Website:** [cascadepay.io](https://cascadepay.io)
+- 🐦 **Twitter:** [@cascadepay](https://x.com/cascadepay)
 - 📧 **Contact:** hello@cascadepay.io
 
 ---
@@ -268,7 +310,7 @@ See [**SDK Documentation**](sdk/README.md) for comprehensive API reference.
 🚧 **Phase 3: In Progress** - Integration & Launch
 - [ ] Security audit
 - [ ] Mainnet deployment
-- [ ] x402 facilitator integrations (PayAI, Coinbase CDP)
+- [x] x402 facilitator integrations (PayAI, Coinbase CDP)
 - [ ] Production monitoring
 
 ---
@@ -302,7 +344,7 @@ MIT
 
 ## Built For
 
-This project is built for the [Colosseum Cypherpunk Hackathon](https://colosseum.org) and integrates with the x402 payment infrastructure.
+This project is built for the [x402 Solana Hackathon](https://solana.com/x402/hackathon) and integrates with the x402 payment infrastructure.
 
 **Target integrations:** PayAI, Coinbase CDP, x402 facilitators
 
