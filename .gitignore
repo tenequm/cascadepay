@@ -1,7 +1,22 @@
+# Anchor
 .anchor
-.DS_Store
 target
 **/*.rs.bk
-node_modules
 test-ledger
+
+# Node
+node_modules
 .yarn
+dist/
+*.log
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local

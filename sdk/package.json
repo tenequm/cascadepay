@@ -1,0 +1,76 @@
+{
+  "name": "@cascadepay/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for cascadepay payment splitting protocol",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "pnpm build",
+    "dev": "tsdown --watch",
+    "type-check": "tsc --noEmit",
+    "example": "ts-node src/example.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "solana",
+    "payments",
+    "splitting",
+    "payment-splitter",
+    "escrow",
+    "x402",
+    "cascadepay",
+    "defi",
+    "web3",
+    "anchor",
+    "spl-token"
+  ],
+  "author": "tenequm <hello@cascadepay.io>",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tenequm/cascadepay"
+  },
+  "bugs": {
+    "url": "https://github.com/tenequm/cascadepay/issues"
+  },
+  "homepage": "https://github.com/tenequm/cascadepay#readme",
+  "peerDependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@solana-program/token": "^0.8.0",
+    "@solana/kit": "^5.0.0"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@solana-program/token": "^0.8.0",
+    "@solana/kit": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "tsdown": "^0.16.1",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "pnpm@10.20.0"
+}

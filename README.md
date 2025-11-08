@@ -14,6 +14,18 @@ graph LR
 
 ---
 
+## 🚀 Live on Devnet
+
+**Program ID:** [`Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2`](https://solscan.io/account/Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2?cluster=devnet)
+
+**Protocol Fee Wallet:** [`Fo2EYEYbnJTnBnbAgnjnG1c2fixpFn1vSUUHSeoHhRP`](https://solscan.io/account/Fo2EYEYbnJTnBnbAgnjnG1c2fixpFn1vSUUHSeoHhRP?cluster=devnet)
+
+**Network:** Solana Devnet
+**Framework:** Anchor 0.32.1
+**Status:** ✅ Deployed & Tested
+
+---
+
 ## Why cascadepay?
 
 ### Without cascadepay:
@@ -60,21 +72,47 @@ graph LR
 
 ---
 
-## Quick Example
+## Quick Start
+
+### Installation
+
+```bash
+npm install @cascadepay/sdk @coral-xyz/anchor
+# or
+pnpm add @cascadepay/sdk @coral-xyz/anchor
+```
+
+### Usage
 
 ```typescript
-// Create split config
-await createSplitConfig({
-  authority: merchantKeypair,
+import { Connection, Keypair } from "@solana/web3.js";
+import { createCascadepayClient } from "@cascadepay/sdk";
+import * as anchor from "@coral-xyz/anchor";
+
+// Initialize SDK
+const connection = new Connection("https://api.devnet.solana.com");
+const wallet = new anchor.Wallet(yourKeypair);
+const idl = require("./cascadepay.json"); // Download from deployment
+
+const sdk = await createCascadepayClient(connection, wallet, idl);
+
+// Create split config (99% total for recipients)
+const recipients = [
+  { address: platformWallet, percentageBps: 900 },   // 9%
+  { address: merchantWallet, percentageBps: 9000 },  // 90%
+];
+
+const configPDA = await sdk.createSplitConfig({
   mint: USDC_MINT,
-  recipients: [
-    { address: platform, percentageBps: 900 },   // 9%
-    { address: merchant, percentageBps: 9000 },  // 90%
-  ],
+  recipients,
 });
 
-// Share vault address with customers
-// Payments automatically split on execution!
+// Get vault address to share with customers
+const config = await sdk.getSplitConfig(configPDA);
+console.log("Payment vault:", config.vault.toString());
+
+// Execute split (permissionless - anyone can call)
+const tx = await sdk.executeSplit(configPDA);
 ```
 
 **Result:**
@@ -115,18 +153,50 @@ Payment + split bundled atomically → instant distribution, seamless UX.
 
 ---
 
-## Tech Stack
+## Architecture
 
-- **Anchor Framework** 0.32.1
-- **Solana** - High-speed, low-cost blockchain
-- **SPL Token / Token-2022** - All token standards supported
-- **TypeScript SDK** - Easy integration
+### Program Instructions
+
+| Instruction | Description | Authority Required |
+|------------|-------------|-------------------|
+| `create_split_config` | Initialize vault and split config | Yes (creator) |
+| `execute_split` | Drain vault and distribute funds | No (permissionless) |
+| `update_split_config` | Update recipients (vault must be empty) | Yes (creator) |
+| `close_split_config` | Close config and reclaim rent | Yes (creator) |
+| `claim_unclaimed` | Recipients claim failed distributions | Yes (recipient) |
+
+### Account Structure
+
+**SplitConfig PDA:**
+- Seeds: `["split_config", authority, mint]`
+- Contains: Recipients, percentages, vault address, unclaimed amounts
+- Space: ~1KB (dynamic based on recipient count)
+
+**Vault:**
+- Associated Token Account (ATA) owned by SplitConfig PDA
+- Holds incoming payments until executed
+- Drained to zero on each `execute_split()`
 
 ---
 
-## Getting Started
+## Development
 
-### Installation
+### Prerequisites
+
+```bash
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install Solana CLI
+sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
+
+# Install Anchor CLI
+cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+avm install 0.32.1
+avm use 0.32.1
+```
+
+### Build & Test
 
 ```bash
 # Clone repository
@@ -139,35 +209,94 @@ pnpm install
 # Build program
 anchor build
 
-# Run tests
-anchor test
+# Run tests on devnet
+anchor test --skip-local-validator
 ```
 
-### Documentation
+### Deploy
+
+```bash
+# Deploy to devnet
+anchor deploy --provider.cluster devnet
+
+# Upload IDL
+anchor idl init --filepath target/idl/cascadepay.json <PROGRAM_ID>
+```
+
+---
+
+## SDK Reference
+
+See [**SDK Documentation**](sdk/README.md) for comprehensive API reference.
+
+### Key Methods
+
+- `createSplitConfig(params)` - Create new split configuration
+- `executeSplit(splitConfigPDA)` - Execute payment distribution
+- `getSplitConfig(splitConfigPDA)` - Fetch configuration
+- `claimUnclaimed(splitConfigPDA, recipient)` - Claim failed payments
+- `updateSplitConfig(splitConfigPDA, newRecipients)` - Update recipients
+- `closeSplitConfig(splitConfigPDA)` - Close and reclaim rent
+- `detectSplitVault(destination, connection, programId)` - Detect if address is a split vault
+
+---
+
+## Resources
 
 - 📖 **[Full Specification](docs/specification.md)** - Protocol details
+- 📦 **[SDK README](sdk/README.md)** - TypeScript SDK documentation
+- 🔗 **[Solscan (Devnet)](https://solscan.io/account/Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2?cluster=devnet)** - View on-chain program
 - 🌐 **Website:** [cascadepay.io](https://cascadepay.io)
 - 📧 **Contact:** hello@cascadepay.io
 
 ---
 
-## Status
+## Project Status
 
-🚧 **In Development** - Pre-launch testing phase
+✅ **Phase 1: Complete** - Core protocol implementation
+- [x] Program design & specification
+- [x] Rust program implementation (5 instructions)
+- [x] Devnet deployment
+- [x] E2E tests passing on devnet
 
-- [x] Core protocol design
-- [x] Specification complete
-- [ ] Program implementation
-- [ ] TypeScript SDK
-- [ ] Devnet deployment
+✅ **Phase 2: Complete** - TypeScript SDK
+- [x] SDK implementation with @solana/kit
+- [x] Comprehensive documentation
+- [x] Example code
+- [x] Split vault detection for x402
+
+🚧 **Phase 3: In Progress** - Integration & Launch
 - [ ] Security audit
-- [ ] Mainnet launch
+- [ ] Mainnet deployment
+- [ ] x402 facilitator integrations (PayAI, Coinbase CDP)
+- [ ] Production monitoring
+
+---
+
+## Tech Stack
+
+- **Anchor Framework** 0.32.1 - Solana program development
+- **@solana/kit** v5 - Modern Solana client library
+- **SPL Token / Token-2022** - Full token standard support
+- **TypeScript SDK** - Easy integration for developers
+
+---
+
+## Security
+
+⚠️ **This program is unaudited and deployed on devnet only.** Do not use in production without a professional security audit.
+
+**Security features:**
+- Non-custodial design (no admin controls after creation)
+- Immutable protocol fee (hardcoded 1%)
+- Account validation via Anchor constraints
+- Graceful degradation (failed distributions → unclaimed queue)
 
 ---
 
 ## License
 
-ISC
+MIT
 
 ---
 
