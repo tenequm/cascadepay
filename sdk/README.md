@@ -5,48 +5,39 @@ TypeScript SDK for integrating with the cascadepay payment splitting protocol on
 ## Installation
 
 ```bash
-npm install @cascadepay/sdk @coral-xyz/anchor @solana/web3.js @solana/spl-token
-# or
-yarn add @cascadepay/sdk @coral-xyz/anchor @solana/web3.js @solana/spl-token
-# or
-pnpm add @cascadepay/sdk @coral-xyz/anchor @solana/web3.js @solana/spl-token
+npm install @cascadepay/sdk @coral-xyz/anchor
 ```
 
 ## Quick Start
 
 ```typescript
-import { Connection, PublicKey, Keypair } from "@solana/web3.js";
 import { createCascadepayClient } from "@cascadepay/sdk";
 import * as anchor from "@coral-xyz/anchor";
 
-// Initialize SDK
-const connection = new Connection("https://api.devnet.solana.com");
+// Initialize
+const connection = new anchor.web3.Connection("https://api.devnet.solana.com");
 const wallet = new anchor.Wallet(yourKeypair);
-const idl = require("./cascadepay.json"); // Load IDL (contains program ID)
+const idl = require("./cascadepay.json");
 
-const sdk = await createCascadepayClient(
-  connection,
-  wallet,
-  idl
-);
+const sdk = await createCascadepayClient(connection, wallet, idl);
 
-// Create split configuration
+// Create split config (99% total for recipients, 1% protocol fee)
 const recipients = [
-  { address: new PublicKey("Alice..."), percentageBps: 5900 }, // 59%
-  { address: new PublicKey("Bob..."), percentageBps: 4000 },   // 40%
-]; // Total: 9900 bps = 99% (protocol receives 1%)
+  { address: new anchor.web3.PublicKey("Platform..."), percentageBps: 900 },  // 9%
+  { address: new anchor.web3.PublicKey("Merchant..."), percentageBps: 9000 }, // 90%
+];
 
 const configPDA = await sdk.createSplitConfig({
-  mint: USDC_MINT,
+  mint: new anchor.web3.PublicKey("USDC_MINT"),
   recipients,
 });
 
-// Get vault address for payments
+// Share vault address with customers
 const config = await sdk.getSplitConfig(configPDA);
-console.log("Send payments to:", config.vault.toString());
+console.log("Payment vault:", config.vault.toString());
 
-// Execute split (permissionless - anyone can call)
-const tx = await sdk.executeSplit(configPDA);
+// Execute split (permissionless)
+await sdk.executeSplit(configPDA);
 ```
 
 ## API Reference
@@ -80,8 +71,10 @@ Creates a new split configuration with vault.
 
 **Example:**
 ```typescript
+import * as anchor from "@coral-xyz/anchor";
+
 const configPDA = await sdk.createSplitConfig({
-  mint: new PublicKey("USDC_MINT"),
+  mint: new anchor.web3.PublicKey("USDC_MINT"),
   recipients: [
     { address: recipient1, percentageBps: 4950 }, // 49.5%
     { address: recipient2, percentageBps: 4950 }, // 49.5%
@@ -201,6 +194,7 @@ Detects if a payment destination is a cascadepay vault.
 **Example:**
 ```typescript
 import { detectSplitVault } from "@cascadepay/sdk";
+import * as anchor from "@coral-xyz/anchor";
 
 const result = await detectSplitVault(
   paymentAddress,
@@ -210,22 +204,54 @@ const result = await detectSplitVault(
 
 if (result.isSplitVault) {
   console.log("Detected split vault!");
-  // Facilitator can bundle: transfer + execute_split
+
+  // Facilitator bundles transfer + execute_split atomically
+  const transferIx = /* create transfer instruction */;
+  const splitIx = await sdk.buildExecuteSplitInstruction(result.splitConfig);
+
+  const tx = new anchor.web3.Transaction()
+    .add(transferIx)
+    .add(splitIx);
+
+  // User signs once, both execute atomically
+  await provider.sendAndConfirm(tx);
 }
+```
+
+### `sdk.buildExecuteSplitInstruction(splitConfigPDA)`
+
+Builds the execute_split instruction without sending it. For facilitators to bundle atomically with transfer.
+
+**Parameters:**
+- `splitConfigPDA` - Address of split configuration
+
+**Returns:** `TransactionInstruction`
+
+**Example:**
+```typescript
+// Build instruction for atomic bundling
+const splitIx = await sdk.buildExecuteSplitInstruction(configPDA);
+
+// Combine with user's transfer
+const tx = new anchor.web3.Transaction()
+  .add(userTransferInstruction)
+  .add(splitIx);
 ```
 
 ## Types
 
 ```typescript
+import * as anchor from "@coral-xyz/anchor";
+
 interface Recipient {
-  address: PublicKey;
+  address: anchor.web3.PublicKey;
   percentageBps: number; // 0-9900 (must total 99%)
 }
 
 interface SplitConfig {
-  authority: PublicKey;
-  mint: PublicKey;
-  vault: PublicKey;
+  authority: anchor.web3.PublicKey;
+  mint: anchor.web3.PublicKey;
+  vault: anchor.web3.PublicKey;
   recipients: Recipient[];
   unclaimedAmounts: UnclaimedAmount[];
   bump: number;
@@ -233,14 +259,14 @@ interface SplitConfig {
 }
 
 interface UnclaimedAmount {
-  recipient: PublicKey;
+  recipient: anchor.web3.PublicKey;
   amount: anchor.BN;
   timestamp: anchor.BN;
 }
 
 interface DetectionResult {
   isSplitVault: boolean;
-  splitConfig?: PublicKey;
+  splitConfig?: anchor.web3.PublicKey;
 }
 ```
 
