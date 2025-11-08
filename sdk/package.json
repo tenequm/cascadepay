@@ -1,6 +1,6 @@
 {
   "name": "@cascadepay/sdk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "TypeScript SDK for cascadepay payment splitting protocol",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -20,7 +20,9 @@
   },
   "files": [
     "dist/**",
-    "README.md"
+    "README.md",
+    "idl.json",
+    "types.ts"
   ],
   "scripts": {
     "build": "tsdown",

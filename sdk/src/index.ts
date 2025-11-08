@@ -17,6 +17,13 @@ import {
   type Address,
 } from "@solana/kit";
 
+// Export IDL and types so users don't need separate IDL file
+import IDL_JSON from "../idl.json";
+import type { Cascadepay as CascadepayIDL } from "../types";
+
+export const IDL = IDL_JSON as CascadepayIDL;
+export type { CascadepayIDL };
+
 // Convert @solana/kit Address constants to Anchor PublicKey for .accounts() calls
 const ASSOCIATED_TOKEN_PROGRAM_ID = new anchor.web3.PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
 

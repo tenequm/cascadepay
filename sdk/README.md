@@ -11,15 +11,14 @@ npm install @cascadepay/sdk @coral-xyz/anchor
 ## Quick Start
 
 ```typescript
-import { createCascadepayClient } from "@cascadepay/sdk";
+import { createCascadepayClient, IDL } from "@cascadepay/sdk";
 import * as anchor from "@coral-xyz/anchor";
 
 // Initialize
 const connection = new anchor.web3.Connection("https://api.devnet.solana.com");
 const wallet = new anchor.Wallet(yourKeypair);
-const idl = require("./cascadepay.json");
 
-const sdk = await createCascadepayClient(connection, wallet, idl);
+const sdk = await createCascadepayClient(connection, wallet, IDL);
 
 // Create split config (99% total for recipients, 1% protocol fee)
 const recipients = [
@@ -47,6 +46,8 @@ await sdk.executeSplit(configPDA);
 Creates a new SDK instance.
 
 ```typescript
+import { createCascadepayClient, IDL } from "@cascadepay/sdk";
+
 async function createCascadepayClient(
   connection: Connection,
   wallet: anchor.Wallet,
@@ -57,7 +58,7 @@ async function createCascadepayClient(
 **Parameters:**
 - `connection` - Solana RPC connection
 - `wallet` - Anchor wallet for signing transactions
-- `idl` - Program IDL (contains program ID in metadata)
+- `idl` - Program IDL (use the bundled `IDL` export from this package)
 
 ### `sdk.createSplitConfig(params)`
 
