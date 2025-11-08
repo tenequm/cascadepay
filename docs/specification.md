@@ -101,6 +101,8 @@ Creates payment split configuration.
 - No duplicates or zero values
 - All recipient ATAs must exist
 
+*Note: Requiring pre-existing ATAs protects payment facilitators from ATA creation costs (0.002 SOL × recipients). Config creators ensure their recipients are ready before setup.*
+
 **Example:**
 ```typescript
 await createSplitConfig({

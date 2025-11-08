@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CascadePay - Payment Splitting Protocol for Solana</title>
+    <meta name="description" content="Non-custodial payment splitting protocol for Solana. Built for x402 payment infrastructure.">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #000;
+            background: #fff;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-top: 40px;
+            margin-bottom: 16px;
+        }
+
+        h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 24px;
+            margin-bottom: 12px;
+        }
+
+        p {
+            margin-bottom: 16px;
+        }
+
+        a {
+            color: #000;
+            text-decoration: underline;
+        }
+
+        a:hover {
+            opacity: 0.6;
+        }
+
+        ul {
+            margin-bottom: 16px;
+            padding-left: 24px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        code {
+            font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 14px;
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        pre {
+            font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 13px;
+            background: #f5f5f5;
+            padding: 16px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+            border-radius: 4px;
+            line-height: 1.4;
+        }
+
+        .header {
+            border-bottom: 1px solid #000;
+            padding-bottom: 16px;
+            margin-bottom: 40px;
+        }
+
+        .tagline {
+            font-size: 18px;
+            color: #333;
+            margin-top: 4px;
+        }
+
+        .section {
+            margin-bottom: 32px;
+        }
+
+        .links {
+            margin-top: 32px;
+            padding-top: 32px;
+            border-top: 1px solid #ddd;
+        }
+
+        .links a {
+            margin-right: 24px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px 12px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            font-weight: 600;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 20px 16px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .tagline {
+                font-size: 16px;
+            }
+        }
+    </style>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#f5f5f5',
+                primaryTextColor: '#000',
+                primaryBorderColor: '#000',
+                lineColor: '#000',
+                secondaryColor: '#fff',
+                tertiaryColor: '#fff',
+                fontSize: '14px',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+            }
+        });
+    </script>
+</head>
+<body>
+    <div class="header">
+        <h1>CascadePay</h1>
+        <p class="tagline">Payment splitting protocol for Solana</p>
+    </div>
+
+    <div class="section">
+        <p>CascadePay is a non-custodial payment splitting protocol that automatically distributes incoming payments to multiple recipients based on pre-configured percentages.</p>
+
+        <div class="mermaid" style="margin: 32px 0; text-align: center;">
+graph LR
+    A[100 USDC<br/>Payment] --> B[CascadePay<br/>Vault]
+    B --> C[Platform<br/>9 USDC]
+    B --> D[Merchant<br/>90 USDC]
+    B --> E[Protocol<br/>1 USDC]
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Overview</h2>
+        <p>The protocol accepts payments to a vault address and distributes funds to 2-20 recipients. A mandatory 1% protocol fee is enforced by the program. Designed for integration with x402 payment facilitators.</p>
+    </div>
+
+    <div class="section">
+        <h2>Key Properties</h2>
+        <ul>
+            <li><strong>Non-custodial:</strong> Funds controlled by program PDAs, not individual wallets</li>
+            <li><strong>Atomic execution:</strong> Payment and split in single transaction via x402</li>
+            <li><strong>Token support:</strong> SPL Token and Token-2022 (all extensions)</li>
+            <li><strong>Graceful failures:</strong> Invalid recipients handled via unclaimed amounts</li>
+            <li><strong>Permissionless:</strong> Anyone can trigger distribution</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Fee Structure</h2>
+        <p>Protocol fee: 1% (100 basis points)</p>
+        <p>Recipient shares must total exactly 99% (9,900 basis points)</p>
+
+        <h3>Example Distribution</h3>
+        <pre>Payment: 100 USDC
+├── Recipient A (90%):  90.00 USDC
+├── Recipient B (9%):    9.00 USDC
+└── Protocol (1%):       1.00 USDC</pre>
+    </div>
+
+    <div class="section">
+        <h2>Integration with x402</h2>
+        <p>Facilitators can auto-detect CascadePay vaults by checking if a payment destination is a token account with a SplitConfig PDA as authority. When detected, the facilitator bundles the transfer and execute_split instructions atomically.</p>
+
+        <h3>Detection Flow</h3>
+        <pre>1. Check if destination is token account
+2. Verify authority is SplitConfig PDA
+3. Bundle: transfer() + execute_split()
+4. Submit atomic transaction</pre>
+    </div>
+
+    <div class="section">
+        <h2>Core Instructions</h2>
+        <ul>
+            <li><code>create_split_config</code> - Initialize split configuration</li>
+            <li><code>execute_split</code> - Distribute vault balance to recipients</li>
+            <li><code>claim_unclaimed</code> - Claim held funds from failed distributions</li>
+            <li><code>update_split_config</code> - Modify recipients (requires empty vault)</li>
+            <li><code>close_split_config</code> - Close configuration and reclaim rent</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Use Cases</h2>
+        <ul>
+            <li>Marketplace revenue splits (platform + merchant)</li>
+            <li>Multi-party revenue sharing (founders, investors, advisors)</li>
+            <li>Event ticketing (venue + organizer + platform)</li>
+            <li>Subscription services with affiliates</li>
+            <li>Gaming platforms (developer + publisher + platform)</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Technical Details</h2>
+        <table>
+            <tr>
+                <td>Framework</td>
+                <td>Anchor 0.32.1</td>
+            </tr>
+            <tr>
+                <td>Token Programs</td>
+                <td>SPL Token, Token-2022</td>
+            </tr>
+            <tr>
+                <td>Recipients</td>
+                <td>2-20 per configuration</td>
+            </tr>
+            <tr>
+                <td>Protocol Fee</td>
+                <td>1% (enforced)</td>
+            </tr>
+            <tr>
+                <td>Native SOL</td>
+                <td>Not supported (use wrapped SOL)</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Status</h2>
+        <p>In development. Pre-launch testing phase.</p>
+    </div>
+
+    <div class="links">
+        <a href="https://github.com/tenequm/cascadepay">GitHub</a>
+        <a href="https://github.com/tenequm/cascadepay/blob/main/docs/specification.md">Specification</a>
+        <a href="mailto:hello@cascadepay.io">Contact</a>
+    </div>
+</body>
+</html>

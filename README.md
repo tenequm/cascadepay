@@ -6,16 +6,10 @@ A non-custodial payment splitter for Solana that distributes incoming payments t
 
 ```mermaid
 graph LR
-    A[💰 100 USDC<br/>Payment] --> B[🔄 cascadepay<br/>Vault]
-    B --> C[👤 Platform<br/>9 USDC]
-    B --> D[🏪 Merchant<br/>90 USDC]
-    B --> E[⚙️ Protocol<br/>1 USDC]
-
-    style A fill:#4ade80
-    style B fill:#60a5fa
-    style C fill:#a78bfa
-    style D fill:#a78bfa
-    style E fill:#9ca3af
+    A[100 USDC<br/>Payment] --> B[CascadePay<br/>Vault]
+    B --> C[Platform<br/>9 USDC]
+    B --> D[Merchant<br/>90 USDC]
+    B --> E[Protocol<br/>1 USDC]
 ```
 
 ---
