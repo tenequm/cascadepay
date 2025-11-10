@@ -85,12 +85,11 @@ pnpm add @cascadepay/sdk @coral-xyz/anchor
 ### Usage
 
 ```typescript
-import { Connection, Keypair } from "@solana/web3.js";
 import { createCascadepayClient } from "@cascadepay/sdk";
 import * as anchor from "@coral-xyz/anchor";
 
 // Initialize SDK
-const connection = new Connection("https://api.devnet.solana.com");
+const connection = new anchor.web3.Connection("https://api.devnet.solana.com");
 const wallet = new anchor.Wallet(yourKeypair);
 const idl = require("./cascadepay.json"); // Download from deployment
 
@@ -128,13 +127,13 @@ $100 payment → $9 platform + $90 merchant + $1 protocol
 
 ```typescript
 import { detectSplitVault } from "@cascadepay/sdk";
-import { Transaction } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
 
 // Detect if payment destination is a CascadePay vault
 const result = await detectSplitVault(
   paymentDestination,
   connection,
-  new PublicKey("Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2")
+  new anchor.web3.PublicKey("Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2")
 );
 
 if (result.isSplitVault) {
@@ -148,7 +147,7 @@ if (result.isSplitVault) {
 
   const splitIx = await sdk.buildExecuteSplitInstruction(result.splitConfig);
 
-  const tx = new Transaction()
+  const tx = new anchor.web3.Transaction()
     .add(transferIx)   // User payment
     .add(splitIx);     // Instant distribution
 
