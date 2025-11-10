@@ -12,10 +12,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   findAssociatedTokenPda,
 } from "@solana-program/token";
-import {
-  address,
-  type Address,
-} from "@solana/kit";
+import { address, type Address } from "@solana/kit";
 
 // Export IDL and types so users don't need separate IDL file
 import IDL_JSON from "../idl.json";
@@ -25,7 +22,9 @@ export const IDL = IDL_JSON as CascadepayIDL;
 export type { CascadepayIDL };
 
 // Convert @solana/kit Address constants to Anchor PublicKey for .accounts() calls
-const ASSOCIATED_TOKEN_PROGRAM_ID = new anchor.web3.PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
+const ASSOCIATED_TOKEN_PROGRAM_ID = new anchor.web3.PublicKey(
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS
+);
 
 // Re-export Anchor types for API compatibility
 type PublicKey = anchor.web3.PublicKey;
@@ -104,10 +103,7 @@ async function detectTokenProgram(
 }
 
 export class Cascadepay {
-  constructor(
-    private program: Program,
-    private provider: AnchorProvider
-  ) {}
+  constructor(private program: Program, private provider: AnchorProvider) {}
 
   /**
    * Creates a new split configuration with vault
@@ -115,15 +111,15 @@ export class Cascadepay {
    * @param params.recipients - Array of recipients with percentages (must sum to 9900 bps = 99%)
    * @returns PDA address of created split config
    */
-  async createSplitConfig(
-    params: CreateSplitConfigParams
-  ): Promise<PublicKey> {
+  async createSplitConfig(params: CreateSplitConfigParams): Promise<PublicKey> {
     const { mint, recipients } = params;
 
     // Validate inputs
     const sum = recipients.reduce((acc, r) => acc + r.percentageBps, 0);
     if (sum !== 9900) {
-      throw new Error("Recipient shares must sum to 9900 basis points (99%). Protocol gets 1%.");
+      throw new Error(
+        "Recipient shares must sum to 9900 basis points (99%). Protocol gets 1%."
+      );
     }
 
     if (recipients.length < 2 || recipients.length > 20) {
@@ -135,13 +131,16 @@ export class Cascadepay {
       [
         Buffer.from("split_config"),
         this.provider.wallet.publicKey.toBuffer(),
-        mint.toBuffer()
+        mint.toBuffer(),
       ],
       this.program.programId
     );
 
     // Detect token program
-    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, mint);
+    const tokenProgramAddr = await detectTokenProgram(
+      this.provider.connection,
+      mint
+    );
     const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
 
     // Derive vault ATA
@@ -153,11 +152,13 @@ export class Cascadepay {
 
     // Get recipient ATAs for validation
     const recipientAtas = await Promise.all(
-      recipients.map(r => findAssociatedTokenPda({
-        mint: toAddress(mint),
-        owner: toAddress(r.address),
-        tokenProgram: tokenProgramAddr,
-      }).then(([ata]) => toPublicKey(ata)))
+      recipients.map((r) =>
+        findAssociatedTokenPda({
+          mint: toAddress(mint),
+          owner: toAddress(r.address),
+          tokenProgram: tokenProgramAddr,
+        }).then(([ata]) => toPublicKey(ata))
+      )
     );
 
     // Create split config
@@ -173,7 +174,7 @@ export class Cascadepay {
         systemProgram: anchor.web3.SystemProgram.programId,
       })
       .remainingAccounts(
-        recipientAtas.map(ata => ({
+        recipientAtas.map((ata) => ({
           pubkey: ata,
           isSigner: false,
           isWritable: false,
@@ -193,12 +194,15 @@ export class Cascadepay {
   async executeSplit(splitConfigPDA: PublicKey): Promise<string> {
     const config = await this.getSplitConfig(splitConfigPDA);
 
-    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+    const tokenProgramAddr = await detectTokenProgram(
+      this.provider.connection,
+      config.mint
+    );
     const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
 
     // Get recipient ATAs
     const recipientAtas = await Promise.all(
-      config.recipients.map(r =>
+      config.recipients.map((r) =>
         findAssociatedTokenPda({
           mint: toAddress(config.mint),
           owner: toAddress(r.address),
@@ -208,7 +212,9 @@ export class Cascadepay {
     );
 
     // Protocol wallet
-    const protocolWallet = new anchor.web3.PublicKey("Fo2EYEYbnJTnBnbAgnjnG1c2fixpFn1vSUUHSeoHhRP");
+    const protocolWallet = new anchor.web3.PublicKey(
+      "2zMEvEkyQKTRjiGkwYPXjPsJUp8eR1rVjoYQ7PzVVZnP"
+    );
     const [protocolAta] = await findAssociatedTokenPda({
       mint: toAddress(config.mint),
       owner: toAddress(protocolWallet),
@@ -221,17 +227,22 @@ export class Cascadepay {
         splitConfig: splitConfigPDA,
         vault: config.vault,
         mint: config.mint,
-        protocolFeeRecipient: toPublicKey(protocolAta),
         executor: this.provider.wallet.publicKey,
         tokenProgram: tokenProgramPubkey,
       })
-      .remainingAccounts(
-        recipientAtas.map(ata => ({
+      .remainingAccounts([
+        ...recipientAtas.map((ata) => ({
           pubkey: ata,
           isSigner: false,
           isWritable: true,
-        }))
-      )
+        })),
+        // Protocol ATA as LAST remaining account
+        {
+          pubkey: toPublicKey(protocolAta),
+          isSigner: false,
+          isWritable: true,
+        },
+      ])
       .rpc();
 
     return tx;
@@ -249,7 +260,10 @@ export class Cascadepay {
   ): Promise<string> {
     const config = await this.getSplitConfig(splitConfigPDA);
 
-    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+    const tokenProgramAddr = await detectTokenProgram(
+      this.provider.connection,
+      config.mint
+    );
     const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
 
     const [recipientAta] = await findAssociatedTokenPda({
@@ -290,8 +304,10 @@ export class Cascadepay {
       version: number;
     }
 
-    const splitConfigAccount = this.program.account['splitConfig'];
-    const config = await splitConfigAccount.fetch(splitConfigPDA) as RawSplitConfig;
+    const splitConfigAccount = this.program.account["splitConfig"];
+    const config = (await splitConfigAccount.fetch(
+      splitConfigPDA
+    )) as RawSplitConfig;
 
     return {
       authority: config.authority,
@@ -322,14 +338,19 @@ export class Cascadepay {
 
     const config = await this.getSplitConfig(splitConfigPDA);
 
-    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+    const tokenProgramAddr = await detectTokenProgram(
+      this.provider.connection,
+      config.mint
+    );
 
     const recipientAtas = await Promise.all(
-      newRecipients.map(r => findAssociatedTokenPda({
-        mint: toAddress(config.mint),
-        owner: toAddress(r.address),
-        tokenProgram: tokenProgramAddr,
-      }).then(([ata]) => toPublicKey(ata)))
+      newRecipients.map((r) =>
+        findAssociatedTokenPda({
+          mint: toAddress(config.mint),
+          owner: toAddress(r.address),
+          tokenProgram: tokenProgramAddr,
+        }).then(([ata]) => toPublicKey(ata))
+      )
     );
 
     const tx = await this.program.methods
@@ -341,7 +362,7 @@ export class Cascadepay {
         mint: config.mint,
       })
       .remainingAccounts(
-        recipientAtas.map(ata => ({
+        recipientAtas.map((ata) => ({
           pubkey: ata,
           isSigner: false,
           isWritable: false,
@@ -361,7 +382,10 @@ export class Cascadepay {
   async closeSplitConfig(splitConfigPDA: PublicKey): Promise<string> {
     const config = await this.getSplitConfig(splitConfigPDA);
 
-    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+    const tokenProgramAddr = await detectTokenProgram(
+      this.provider.connection,
+      config.mint
+    );
     const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
 
     const tx = await this.program.methods
@@ -402,7 +426,7 @@ export class Cascadepay {
       throw new Error("Percentages must sum to 99% (protocol gets 1%)");
     }
 
-    return percentages.map(pct => Math.round((pct / 100) * 10000));
+    return percentages.map((pct) => Math.round((pct / 100) * 10000));
   }
 
   /**
@@ -419,12 +443,15 @@ export class Cascadepay {
   ): Promise<anchor.web3.TransactionInstruction> {
     const config = await this.getSplitConfig(splitConfigPDA);
 
-    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+    const tokenProgramAddr = await detectTokenProgram(
+      this.provider.connection,
+      config.mint
+    );
     const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
 
     // Get recipient ATAs
     const recipientAtas = await Promise.all(
-      config.recipients.map(r =>
+      config.recipients.map((r) =>
         findAssociatedTokenPda({
           mint: toAddress(config.mint),
           owner: toAddress(r.address),
@@ -434,7 +461,9 @@ export class Cascadepay {
     );
 
     // Protocol wallet
-    const protocolWallet = new anchor.web3.PublicKey("Fo2EYEYbnJTnBnbAgnjnG1c2fixpFn1vSUUHSeoHhRP");
+    const protocolWallet = new anchor.web3.PublicKey(
+      "2zMEvEkyQKTRjiGkwYPXjPsJUp8eR1rVjoYQ7PzVVZnP"
+    );
     const [protocolAta] = await findAssociatedTokenPda({
       mint: toAddress(config.mint),
       owner: toAddress(protocolWallet),
@@ -450,18 +479,64 @@ export class Cascadepay {
         splitConfig: splitConfigPDA,
         vault: config.vault,
         mint: config.mint,
-        protocolFeeRecipient: toPublicKey(protocolAta),
         executor: executorKey,
         tokenProgram: tokenProgramPubkey,
       })
-      .remainingAccounts(
-        recipientAtas.map(ata => ({
+      .remainingAccounts([
+        ...recipientAtas.map((ata) => ({
           pubkey: ata,
           isSigner: false,
           isWritable: true,
-        }))
-      )
+        })),
+        // Protocol ATA as LAST remaining account
+        {
+          pubkey: toPublicKey(protocolAta),
+          isSigner: false,
+          isWritable: true,
+        },
+      ])
       .instruction();
+  }
+
+  /**
+   * Gets the protocol ATA address for a given mint
+   * Useful for checking if protocol ATA exists before executing splits
+   *
+   * @param mint - The token mint address
+   * @returns Protocol ATA address
+   */
+  async getProtocolAta(mint: PublicKey): Promise<PublicKey> {
+    const tokenProgramAddr = await detectTokenProgram(
+      this.provider.connection,
+      mint
+    );
+    const protocolWallet = new anchor.web3.PublicKey(
+      "2zMEvEkyQKTRjiGkwYPXjPsJUp8eR1rVjoYQ7PzVVZnP"
+    );
+    const [protocolAta] = await findAssociatedTokenPda({
+      mint: toAddress(mint),
+      owner: toAddress(protocolWallet),
+      tokenProgram: tokenProgramAddr,
+    });
+    return toPublicKey(protocolAta);
+  }
+
+  /**
+   * Checks if the protocol ATA exists for a given mint
+   *
+   * @param mint - The token mint address
+   * @returns True if protocol ATA exists, false otherwise
+   */
+  async protocolAtaExists(mint: PublicKey): Promise<boolean> {
+    try {
+      const protocolAta = await this.getProtocolAta(mint);
+      const accountInfo = await this.provider.connection.getAccountInfo(
+        protocolAta
+      );
+      return accountInfo !== null;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -477,7 +552,10 @@ export class Cascadepay {
   ): Promise<anchor.web3.TransactionInstruction> {
     const config = await this.getSplitConfig(splitConfigPDA);
 
-    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+    const tokenProgramAddr = await detectTokenProgram(
+      this.provider.connection,
+      config.mint
+    );
     const tokenProgramPubkey = toPublicKey(tokenProgramAddr);
 
     const [recipientAta] = await findAssociatedTokenPda({
@@ -517,7 +595,20 @@ export class Cascadepay {
     executor?: PublicKey
   ): Promise<anchor.web3.Transaction> {
     const config = await this.getSplitConfig(splitConfigPDA);
-    const tokenProgramAddr = await detectTokenProgram(this.provider.connection, config.mint);
+    const tokenProgramAddr = await detectTokenProgram(
+      this.provider.connection,
+      config.mint
+    );
+
+    // Check if protocol ATA exists - required for execute_split
+    const protocolAtaExists = await this.protocolAtaExists(config.mint);
+    if (!protocolAtaExists) {
+      const protocolAta = await this.getProtocolAta(config.mint);
+      throw new Error(
+        `Protocol ATA (${protocolAta.toString()}) does not exist for mint ${config.mint.toString()}. ` +
+          `Please create it before executing split. You can use getProtocolAta() to get the address.`
+      );
+    }
 
     // Get payer's ATA
     const [payerAta] = await findAssociatedTokenPda({
@@ -534,7 +625,9 @@ export class Cascadepay {
     const decimals = mintInfo.data[44];
 
     // Build transfer instruction using @solana-program/token
-    const { getTransferCheckedInstruction } = await import("@solana-program/token");
+    const { getTransferCheckedInstruction } = await import(
+      "@solana-program/token"
+    );
     const transferIxKit = getTransferCheckedInstruction({
       source: payerAta, // Already an Address from findAssociatedTokenPda
       mint: toAddress(config.mint),
@@ -546,7 +639,7 @@ export class Cascadepay {
 
     // Convert Kit instruction to Anchor TransactionInstruction
     const transferIx = new anchor.web3.TransactionInstruction({
-      keys: transferIxKit.accounts.map(acc => ({
+      keys: transferIxKit.accounts.map((acc) => ({
         pubkey: toPublicKey(acc.address),
         isSigner: acc.role === 2 || acc.role === 3,
         isWritable: acc.role === 1 || acc.role === 3,
@@ -568,7 +661,6 @@ export class Cascadepay {
 
     return transaction;
   }
-
 }
 
 /**
@@ -590,7 +682,9 @@ export async function detectSplitVault(
 
     // Check if it's a token account (owned by Token Program or Token-2022)
     const TOKEN_PROGRAM_ID = new anchor.web3.PublicKey(TOKEN_PROGRAM_ADDRESS);
-    const TOKEN_2022_PROGRAM_ID = new anchor.web3.PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+    const TOKEN_2022_PROGRAM_ID = new anchor.web3.PublicKey(
+      "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    );
 
     const isTokenAccount =
       accountInfo.owner.equals(TOKEN_PROGRAM_ID) ||
@@ -610,10 +704,16 @@ export async function detectSplitVault(
     // Create minimal wallet for read-only operations
     const wallet: anchor.Wallet = {
       publicKey: anchor.web3.PublicKey.default,
-      signTransaction: async () => { throw new Error("Read-only wallet"); },
-      signAllTransactions: async () => { throw new Error("Read-only wallet"); },
+      signTransaction: async () => {
+        throw new Error("Read-only wallet");
+      },
+      signAllTransactions: async () => {
+        throw new Error("Read-only wallet");
+      },
     };
-    const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
+    const provider = new AnchorProvider(connection, wallet, {
+      commitment: "confirmed",
+    });
 
     // Fetch program IDL from chain
     const idl = await Program.fetchIdl(programId, provider);
@@ -626,14 +726,16 @@ export async function detectSplitVault(
         vault: PublicKey;
       }
 
-      const splitConfigAccount = program.account['splitConfig'];
-      const config = await splitConfigAccount.fetch(authority) as RawSplitConfig;
+      const splitConfigAccount = program.account["splitConfig"];
+      const config = (await splitConfigAccount.fetch(
+        authority
+      )) as RawSplitConfig;
 
       // Verify it's actually a split config by checking if vault matches destination
       if (config.vault.equals(destination)) {
         return {
           isSplitVault: true,
-          splitConfig: authority
+          splitConfig: authority,
         };
       }
     } catch {

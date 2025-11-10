@@ -34,7 +34,9 @@ async function facilitatorFlow() {
   );
 
   // Load program info
-  const programId = new anchor.web3.PublicKey("Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2");
+  const programId = new anchor.web3.PublicKey(
+    "Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2"
+  );
   const idlPath = join(__dirname, "../../target/idl/cascadepay.json");
   const idl = JSON.parse(readFileSync(idlPath, "utf-8"));
 
@@ -55,7 +57,9 @@ async function facilitatorFlow() {
   const paymentRequest = {
     destination: new anchor.web3.PublicKey("VAULT_ADDRESS_HERE"), // User wants to pay this
     amount: 5_000_000n, // 5 USDC (6 decimals)
-    token: new anchor.web3.PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"), // USDC devnet
+    token: new anchor.web3.PublicKey(
+      "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+    ), // USDC devnet
   };
 
   console.log("Payment request:");
@@ -101,7 +105,9 @@ async function facilitatorFlow() {
   console.log(`  Recipients: ${splitConfig.recipients.length}`);
   splitConfig.recipients.forEach((r, i) => {
     const pct = (r.percentageBps / 100).toFixed(1);
-    console.log(`    ${i + 1}. ${r.address.toString().slice(0, 8)}... - ${pct}%`);
+    console.log(
+      `    ${i + 1}. ${r.address.toString().slice(0, 8)}... - ${pct}%`
+    );
   });
   console.log(`  + Protocol: 1.0%`);
   console.log(`  Total: 100%\n`);
@@ -131,7 +137,8 @@ async function facilitatorFlow() {
   console.log("✍️  STEP 5: Preparing transaction for user signature\n");
 
   // Set recent blockhash and fee payer
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash();
   bundledTransaction.recentBlockhash = blockhash;
   bundledTransaction.feePayer = userWallet.publicKey;
 
@@ -148,7 +155,7 @@ async function facilitatorFlow() {
 
   try {
     // Sign transaction
-    await userWallet.signTransaction(bundled Transaction);
+    await userWallet.signTransaction(bundledTransaction);
     console.log("✅ Transaction signed by user\n");
 
     // Send transaction
@@ -181,8 +188,9 @@ async function facilitatorFlow() {
     console.log("  4. ✅ Protocol fee collected\n");
 
     console.log(`🔗 View on Solana Explorer:`);
-    console.log(`   https://explorer.solana.com/tx/${signature}?cluster=devnet\n`);
-
+    console.log(
+      `   https://explorer.solana.com/tx/${signature}?cluster=devnet\n`
+    );
   } catch (error) {
     const err = error as Error;
     console.error("❌ Transaction failed:", err.message);
@@ -199,8 +207,12 @@ async function manualInstructionFlow() {
   console.log("\n" + "=".repeat(80));
   console.log("🛠️  Advanced: Manual instruction building\n");
 
-  const connection = new anchor.web3.Connection("https://api.devnet.solana.com");
-  const programId = new anchor.web3.PublicKey("Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2");
+  const connection = new anchor.web3.Connection(
+    "https://api.devnet.solana.com"
+  );
+  const programId = new anchor.web3.PublicKey(
+    "Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2"
+  );
   const idlPath = join(__dirname, "../../target/idl/cascadepay.json");
   const idl = JSON.parse(readFileSync(idlPath, "utf-8"));
   const wallet = new anchor.Wallet(anchor.web3.Keypair.generate());
@@ -215,7 +227,9 @@ async function manualInstructionFlow() {
   );
 
   console.log("Built execute_split instruction:");
-  console.log(`  Program: ${executeSplitIx.programId.toString().slice(0, 8)}...`);
+  console.log(
+    `  Program: ${executeSplitIx.programId.toString().slice(0, 8)}...`
+  );
   console.log(`  Accounts: ${executeSplitIx.keys.length}`);
   console.log(`  Data: ${executeSplitIx.data.length} bytes\n`);
 
@@ -230,7 +244,9 @@ async function manualInstructionFlow() {
   customTransaction.add(executeSplitIx);
 
   console.log("Custom transaction built with split execution");
-  console.log(`  Total instructions: ${customTransaction.instructions.length}\n`);
+  console.log(
+    `  Total instructions: ${customTransaction.instructions.length}\n`
+  );
 }
 
 // Run examples

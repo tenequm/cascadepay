@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
+    associated_token::{AssociatedToken, get_associated_token_address_with_program_id},
     token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked},
     token,
     token_2022,
@@ -8,8 +8,8 @@ use anchor_spl::{
 
 declare_id!("Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2");
 
-// Protocol wallet for devnet (receives 1% fee)
-pub const PROTOCOL_WALLET: Pubkey = pubkey!("Fo2EYEYbnJTnBnbAgnjnG1c2fixpFn1vSUUHSeoHhRP");
+// Protocol wallet for mainnet (receives 1% fee)
+pub const PROTOCOL_WALLET: Pubkey = pubkey!("2zMEvEkyQKTRjiGkwYPXjPsJUp8eR1rVjoYQ7PzVVZnP");
 pub const PROTOCOL_FEE_BPS: u16 = 100;         // 1% = 100 basis points
 pub const REQUIRED_SPLIT_TOTAL: u16 = 9900;    // Recipients MUST total 99%
 pub const MIN_RECIPIENTS: usize = 2;
@@ -215,19 +215,68 @@ pub mod cascadepay {
             .ok_or(ErrorCode::MathUnderflow)?;
 
         if protocol_fee > 0 {
-            // Transfer protocol fee
-            let cpi_accounts = TransferChecked {
-                from: ctx.accounts.vault.to_account_info(),
-                mint: ctx.accounts.mint.to_account_info(),
-                to: ctx.accounts.protocol_fee_recipient.to_account_info(),
-                authority: ctx.accounts.split_config.to_account_info(),
-            };
-            let cpi_ctx = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                cpi_accounts,
-                signer_seeds,
+            // 1. Derive expected protocol ATA (Token-2022 compatible)
+            let expected_protocol_ata = get_associated_token_address_with_program_id(
+                &PROTOCOL_WALLET,
+                &ctx.accounts.mint.key(),
+                &ctx.accounts.token_program.key()  // Uses actual token program (Token or Token-2022)
             );
-            token_interface::transfer_checked(cpi_ctx, protocol_fee, ctx.accounts.mint.decimals)?;
+
+            // 2. Get protocol ATA from remaining_accounts (should be LAST)
+            let protocol_ata_info = ctx.remaining_accounts
+                .last()
+                .ok_or(ErrorCode::MissingProtocolAccount)?;
+
+            // 3. Validate address matches expected derivation
+            require!(
+                protocol_ata_info.key() == expected_protocol_ata,
+                ErrorCode::InvalidProtocolFeeRecipient
+            );
+
+            // 4. Validate account is writable
+            require!(
+                protocol_ata_info.is_writable,
+                ErrorCode::InvalidProtocolFeeRecipient
+            );
+
+            // 5. If protocol ATA doesn't exist, skip protocol fee (graceful degradation)
+            if protocol_ata_info.data_is_empty() {
+                // Protocol ATA doesn't exist yet - protocol fee stays in vault
+                // Protocol can create ATA later and re-execute split to claim fees
+                msg!("Protocol ATA doesn't exist, skipping protocol fee transfer");
+            } else {
+                // 6. Validate account is owned by token program (SPL Token or Token-2022)
+                let valid_owner = protocol_ata_info.owner == &token::ID
+                    || protocol_ata_info.owner == &token_2022::ID;
+                require!(valid_owner, ErrorCode::InvalidProtocolFeeRecipient);
+
+                // 7. Deserialize and validate token account fields
+                let protocol_ata = InterfaceAccount::<'info, TokenAccount>::try_from(protocol_ata_info)
+                    .map_err(|_| ErrorCode::InvalidProtocolFeeRecipient)?;
+
+                require!(
+                    protocol_ata.owner == PROTOCOL_WALLET,
+                    ErrorCode::InvalidProtocolFeeRecipient
+                );
+                require!(
+                    protocol_ata.mint == ctx.accounts.mint.key(),
+                    ErrorCode::InvalidProtocolFeeRecipient
+                );
+
+                // 8. Transfer protocol fee
+                let cpi_accounts = TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: protocol_ata.to_account_info(),
+                    authority: ctx.accounts.split_config.to_account_info(),
+                };
+                let cpi_ctx = CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    cpi_accounts,
+                    signer_seeds,
+                );
+                token_interface::transfer_checked(cpi_ctx, protocol_fee, ctx.accounts.mint.decimals)?;
+            }
         }
 
         emit!(SplitExecuted {
@@ -445,10 +494,6 @@ pub struct ExecuteSplit<'info> {
     )]
     pub mint: InterfaceAccount<'info, Mint>,
 
-    /// CHECK: Protocol fee recipient (validated in instruction logic)
-    #[account(mut)]
-    pub protocol_fee_recipient: AccountInfo<'info>,
-
     /// CHECK: Can be anyone (permissionless execution)
     pub executor: AccountInfo<'info>,
 
@@ -651,8 +696,11 @@ pub enum ErrorCode {
     #[msg("Too many unclaimed entries (max 20)")]
     TooManyUnclaimedEntries,
 
-    #[msg("Protocol fee recipient has wrong mint")]
-    InvalidProtocolFeeAccount,
+    #[msg("Protocol fee account was not provided in remaining_accounts")]
+    MissingProtocolAccount,
+
+    #[msg("Protocol fee recipient must be the designated protocol wallet ATA")]
+    InvalidProtocolFeeRecipient,
 
     #[msg("Recipient has no unclaimed funds to claim")]
     NothingToClaim,

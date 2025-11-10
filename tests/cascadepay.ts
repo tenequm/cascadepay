@@ -2,10 +2,6 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Cascadepay } from "../target/types/cascadepay";
 import { assert } from "chai";
-import {
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID
-} from "@solana/spl-token";
 
 // Modern Solana imports
 import {
@@ -29,6 +25,7 @@ import {
 import { getCreateAccountInstruction } from "@solana-program/system";
 import {
   TOKEN_PROGRAM_ADDRESS,
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   getInitializeMintInstruction,
   getMintSize,
   findAssociatedTokenPda,
@@ -45,17 +42,37 @@ describe("cascadepay E2E Tests", () => {
 
   const program = anchor.workspace.Cascadepay as Program<Cascadepay>;
 
+  // Convert modern Address constants to Anchor PublicKey for .accounts() calls
+  const TOKEN_PROGRAM_ID = new anchor.web3.PublicKey(TOKEN_PROGRAM_ADDRESS);
+  const ASSOCIATED_TOKEN_PROGRAM_ID = new anchor.web3.PublicKey(
+    ASSOCIATED_TOKEN_PROGRAM_ADDRESS
+  );
+
   // Modern Solana RPC clients
   const rpcUrl = provider.connection.rpcEndpoint;
-  const wsUrl = rpcUrl.replace("https://", "wss://").replace("http://", "ws://");
+  const wsUrl = rpcUrl
+    .replace("https://", "wss://")
+    .replace("http://", "ws://");
   const rpc = createSolanaRpc(rpcUrl);
-  const rpcSubscriptions = createSolanaRpcSubscriptions(wsUrl);
 
-  const airdrop = airdropFactory({ rpc, rpcSubscriptions });
-  const sendAndConfirmTransaction = sendAndConfirmTransactionFactory({
-    rpc,
-    rpcSubscriptions
-  });
+  // Create these lazily to avoid WebSocket connection issues during module load
+  let rpcSubscriptions: ReturnType<typeof createSolanaRpcSubscriptions>;
+  let airdrop: ReturnType<typeof airdropFactory>;
+  let sendAndConfirmTransaction: ReturnType<
+    typeof sendAndConfirmTransactionFactory
+  >;
+
+  function ensureRpcSubscriptions() {
+    if (!rpcSubscriptions) {
+      rpcSubscriptions = createSolanaRpcSubscriptions(wsUrl);
+      airdrop = airdropFactory({ rpc, rpcSubscriptions });
+      sendAndConfirmTransaction = sendAndConfirmTransactionFactory({
+        rpc,
+        rpcSubscriptions,
+      });
+    }
+    return { rpcSubscriptions, airdrop, sendAndConfirmTransaction };
+  }
 
   // Test accounts
   let feePayer: any; // @solana/kit signer created from Anchor wallet
@@ -68,14 +85,18 @@ describe("cascadepay E2E Tests", () => {
   let splitConfigPda: anchor.web3.PublicKey;
   let vaultAtaAddress: Address;
 
-  const PROTOCOL_WALLET = address("Fo2EYEYbnJTnBnbAgnjnG1c2fixpFn1vSUUHSeoHhRP");
+  const PROTOCOL_WALLET = address(
+    "2zMEvEkyQKTRjiGkwYPXjPsJUp8eR1rVjoYQ7PzVVZnP"
+  );
 
   // Helper: Create mint with modern API
   async function createMint(feePayer: any, decimals: number): Promise<Address> {
     const mint = await generateKeyPairSigner();
 
     const space = BigInt(getMintSize());
-    const rentResponse = await rpc.getMinimumBalanceForRentExemption(space).send();
+    const rentResponse = await rpc
+      .getMinimumBalanceForRentExemption(space)
+      .send();
     const rent = rentResponse;
 
     const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
@@ -99,17 +120,28 @@ describe("cascadepay E2E Tests", () => {
       createTransactionMessage({ version: 0 }),
       (tx) => setTransactionMessageFeePayerSigner(feePayer, tx),
       (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
-      (tx) => appendTransactionMessageInstructions([createAccountIx, initializeMintIx], tx)
+      (tx) =>
+        appendTransactionMessageInstructions(
+          [createAccountIx, initializeMintIx],
+          tx
+        )
     );
 
-    const signedTransaction = await signTransactionMessageWithSigners(transactionMessage);
-    await sendAndConfirmTransaction(signedTransaction, { commitment: "confirmed" });
+    const signedTransaction = await signTransactionMessageWithSigners(
+      transactionMessage
+    );
+    const { sendAndConfirmTransaction: confirmTx } = ensureRpcSubscriptions();
+    await confirmTx(signedTransaction, { commitment: "confirmed" });
 
     return mint.address;
   }
 
   // Helper: Create ATA
-  async function createATA(feePayer: any, mint: Address, owner: Address): Promise<Address> {
+  async function createATA(
+    feePayer: any,
+    mint: Address,
+    owner: Address
+  ): Promise<Address> {
     const [ataAddress] = await findAssociatedTokenPda({
       mint,
       owner,
@@ -131,14 +163,22 @@ describe("cascadepay E2E Tests", () => {
       (tx) => appendTransactionMessageInstructions([createAtaIx], tx)
     );
 
-    const signedTransaction = await signTransactionMessageWithSigners(transactionMessage);
-    await sendAndConfirmTransaction(signedTransaction, { commitment: "confirmed" });
+    const signedTransaction = await signTransactionMessageWithSigners(
+      transactionMessage
+    );
+    const { sendAndConfirmTransaction: confirmTx } = ensureRpcSubscriptions();
+    await confirmTx(signedTransaction, { commitment: "confirmed" });
 
     return ataAddress;
   }
 
   // Helper: Mint tokens
-  async function mintTokens(feePayer: any, mint: Address, destination: Address, amount: bigint) {
+  async function mintTokens(
+    feePayer: any,
+    mint: Address,
+    destination: Address,
+    amount: bigint
+  ) {
     const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
 
     const mintToIx = getMintToInstruction({
@@ -155,26 +195,36 @@ describe("cascadepay E2E Tests", () => {
       (tx) => appendTransactionMessageInstructions([mintToIx], tx)
     );
 
-    const signedTransaction = await signTransactionMessageWithSigners(transactionMessage);
-    await sendAndConfirmTransaction(signedTransaction, { commitment: "confirmed" });
+    const signedTransaction = await signTransactionMessageWithSigners(
+      transactionMessage
+    );
+    const { sendAndConfirmTransaction: confirmTx } = ensureRpcSubscriptions();
+    await confirmTx(signedTransaction, { commitment: "confirmed" });
   }
 
-  // Helper: Transfer tokens (using Anchor Transaction for reliability)
-  async function transferTokens(source: Address, destination: Address, amount: bigint) {
-    // Import legacy spl-token for transfer
-    const { createTransferCheckedInstruction } = await import("@solana/spl-token");
+  // Helper: Transfer tokens using modern @solana-program/token
+  async function transferTokens(
+    source: Address,
+    destination: Address,
+    amount: bigint
+  ) {
+    const transferIxKit = getTransferInstruction({
+      source,
+      destination,
+      authority: toAddress(provider.wallet.publicKey),
+      amount,
+    });
 
-    const sourcePubkey = toPublicKey(source);
-    const destPubkey = toPublicKey(destination);
-
-    const transferIx = createTransferCheckedInstruction(
-      sourcePubkey,      // source
-      toPublicKey(mintAddress),  // mint
-      destPubkey,        // destination
-      provider.wallet.publicKey, // owner
-      amount,            // amount
-      6                  // decimals
-    );
+    // Convert Kit instruction to Anchor TransactionInstruction
+    const transferIx = new anchor.web3.TransactionInstruction({
+      keys: transferIxKit.accounts.map((acc) => ({
+        pubkey: toPublicKey(acc.address),
+        isSigner: acc.role === 2 || acc.role === 3,
+        isWritable: acc.role === 1 || acc.role === 3,
+      })),
+      programId: toPublicKey(transferIxKit.programAddress),
+      data: Buffer.from(transferIxKit.data),
+    });
 
     const tx = new anchor.web3.Transaction().add(transferIx);
     await provider.sendAndConfirm(tx);
@@ -219,13 +269,25 @@ describe("cascadepay E2E Tests", () => {
 
     // Create recipient ATAs
     console.log("\nCreating recipient token accounts...");
-    recipient1AtaAddress = await createATA(feePayer, mintAddress, recipient1Signer.address);
-    recipient2AtaAddress = await createATA(feePayer, mintAddress, recipient2Signer.address);
+    recipient1AtaAddress = await createATA(
+      feePayer,
+      mintAddress,
+      recipient1Signer.address
+    );
+    recipient2AtaAddress = await createATA(
+      feePayer,
+      mintAddress,
+      recipient2Signer.address
+    );
     console.log(`✓ Recipient 1 ATA: ${recipient1AtaAddress}`);
     console.log(`✓ Recipient 2 ATA: ${recipient2AtaAddress}`);
 
     // Create protocol wallet ATA
-    protocolAtaAddress = await createATA(feePayer, mintAddress, PROTOCOL_WALLET);
+    protocolAtaAddress = await createATA(
+      feePayer,
+      mintAddress,
+      PROTOCOL_WALLET
+    );
     console.log(`✓ Protocol ATA: ${protocolAtaAddress}`);
 
     // Derive split config PDA (using Anchor)
@@ -286,8 +348,16 @@ describe("cascadepay E2E Tests", () => {
           systemProgram: anchor.web3.SystemProgram.programId,
         })
         .remainingAccounts([
-          { pubkey: toPublicKey(recipient1AtaAddress), isSigner: false, isWritable: false },
-          { pubkey: toPublicKey(recipient2AtaAddress), isSigner: false, isWritable: false },
+          {
+            pubkey: toPublicKey(recipient1AtaAddress),
+            isSigner: false,
+            isWritable: false,
+          },
+          {
+            pubkey: toPublicKey(recipient2AtaAddress),
+            isSigner: false,
+            isWritable: false,
+          },
         ])
         .rpc();
 
@@ -296,9 +366,15 @@ describe("cascadepay E2E Tests", () => {
 
       // Verify split config account
       const config = await program.account.splitConfig.fetch(splitConfigPda);
-      assert.equal(config.authority.toBase58(), provider.wallet.publicKey.toBase58());
+      assert.equal(
+        config.authority.toBase58(),
+        provider.wallet.publicKey.toBase58()
+      );
       assert.equal(config.mint.toBase58(), toPublicKey(mintAddress).toBase58());
-      assert.equal(config.vault.toBase58(), toPublicKey(vaultAtaAddress).toBase58());
+      assert.equal(
+        config.vault.toBase58(),
+        toPublicKey(vaultAtaAddress).toBase58()
+      );
       assert.equal(config.recipients.length, 2);
       assert.equal(config.version, 1);
       console.log("✓ Split config account verified");
@@ -355,13 +431,26 @@ describe("cascadepay E2E Tests", () => {
           splitConfig: splitConfigPda,
           vault: toPublicKey(vaultAtaAddress),
           mint: toPublicKey(mintAddress),
-          protocolFeeRecipient: toPublicKey(protocolAtaAddress),
           executor: provider.wallet.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .remainingAccounts([
-          { pubkey: toPublicKey(recipient1AtaAddress), isSigner: false, isWritable: true },
-          { pubkey: toPublicKey(recipient2AtaAddress), isSigner: false, isWritable: true },
+          {
+            pubkey: toPublicKey(recipient1AtaAddress),
+            isSigner: false,
+            isWritable: true,
+          },
+          {
+            pubkey: toPublicKey(recipient2AtaAddress),
+            isSigner: false,
+            isWritable: true,
+          },
+          // Protocol ATA as LAST remaining account
+          {
+            pubkey: toPublicKey(protocolAtaAddress),
+            isSigner: false,
+            isWritable: true,
+          },
         ])
         .rpc();
 
@@ -372,6 +461,9 @@ describe("cascadepay E2E Tests", () => {
       throw error;
     }
 
+    // Wait for balance updates to propagate
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     // Verify balances
     console.log("Verifying token distribution...");
     const recipient1Balance = await getTokenBalance(recipient1AtaAddress);
@@ -380,16 +472,34 @@ describe("cascadepay E2E Tests", () => {
     const vaultAfter = await getTokenBalance(vaultAtaAddress);
 
     console.log(`\n📊 Distribution Results:`);
-    console.log(`  - Recipient 1: ${recipient1Balance} tokens (expected: ~495,000,000)`);
-    console.log(`  - Recipient 2: ${recipient2Balance} tokens (expected: ~495,000,000)`);
-    console.log(`  - Protocol: ${protocolBalance} tokens (expected: ~10,000,000 + dust)`);
+    console.log(
+      `  - Recipient 1: ${recipient1Balance} tokens (expected: ~495,000,000)`
+    );
+    console.log(
+      `  - Recipient 2: ${recipient2Balance} tokens (expected: ~495,000,000)`
+    );
+    console.log(
+      `  - Protocol: ${protocolBalance} tokens (expected: ~10,000,000 + dust)`
+    );
     console.log(`  - Vault remaining: ${vaultAfter} tokens (expected: 0)\n`);
 
     // Assertions
     assert.equal(Number(vaultAfter), 0, "Vault should be empty");
-    assert.isAbove(Number(recipient1Balance), 490_000_000, "Recipient 1 should receive ~49.5%");
-    assert.isAbove(Number(recipient2Balance), 490_000_000, "Recipient 2 should receive ~49.5%");
-    assert.isAbove(Number(protocolBalance), 9_000_000, "Protocol should receive ~1%");
+    assert.isAbove(
+      Number(recipient1Balance),
+      490_000_000,
+      "Recipient 1 should receive ~49.5%"
+    );
+    assert.isAbove(
+      Number(recipient2Balance),
+      490_000_000,
+      "Recipient 2 should receive ~49.5%"
+    );
+    assert.isAbove(
+      Number(protocolBalance),
+      9_000_000,
+      "Protocol should receive ~1%"
+    );
 
     console.log("✅ All balances verified correctly!\n");
   });
@@ -423,7 +533,11 @@ describe("cascadepay E2E Tests", () => {
     console.log(`Expected: 1,000,000,000 tokens\n`);
 
     assert.equal(Number(vaultFinal), 0, "Vault should be empty");
-    assert.equal(config.unclaimedAmounts.length, 0, "No unclaimed funds expected");
+    assert.equal(
+      config.unclaimedAmounts.length,
+      0,
+      "No unclaimed funds expected"
+    );
 
     console.log("✅ All tests passed successfully!\n");
   });
@@ -518,13 +632,19 @@ describe("cascadepay E2E Tests", () => {
 
     console.log("Bundled transaction created!");
     console.log(`  - Instructions: ${bundledTx.instructions.length}`);
-    assert.equal(bundledTx.instructions.length, 2, "Should have exactly 2 instructions");
+    assert.equal(
+      bundledTx.instructions.length,
+      2,
+      "Should have exactly 2 instructions"
+    );
     console.log("  - Instruction 1: Transfer tokens to vault");
     console.log("  - Instruction 2: Execute split distribution\n");
 
     // Set recent blockhash and send
     console.log("Sending bundled transaction (atomic execution)...");
-    bundledTx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+    bundledTx.recentBlockhash = (
+      await provider.connection.getLatestBlockhash()
+    ).blockhash;
     bundledTx.feePayer = provider.wallet.publicKey;
 
     const signature = await provider.sendAndConfirm(bundledTx);
@@ -543,19 +663,37 @@ describe("cascadepay E2E Tests", () => {
     const protocolReceived = Number(protocolAfter) - Number(protocolBefore);
 
     console.log("\n📊 Atomic Distribution Results:");
-    console.log(`  - Recipient 1 received: ${r1Received} tokens (~247.5M expected)`);
-    console.log(`  - Recipient 2 received: ${r2Received} tokens (~247.5M expected)`);
-    console.log(`  - Protocol received: ${protocolReceived} tokens (~5M + dust expected)`);
+    console.log(
+      `  - Recipient 1 received: ${r1Received} tokens (~247.5M expected)`
+    );
+    console.log(
+      `  - Recipient 2 received: ${r2Received} tokens (~247.5M expected)`
+    );
+    console.log(
+      `  - Protocol received: ${protocolReceived} tokens (~5M + dust expected)`
+    );
     console.log(`  - Vault remaining: ${vaultAfter} (should be 0)\n`);
 
     // Assertions
     assert.equal(Number(vaultAfter), 0, "Vault should be completely drained");
-    assert.isAbove(r1Received, 240_000_000, "Recipient 1 should receive ~49.5%");
-    assert.isAbove(r2Received, 240_000_000, "Recipient 2 should receive ~49.5%");
+    assert.isAbove(
+      r1Received,
+      240_000_000,
+      "Recipient 1 should receive ~49.5%"
+    );
+    assert.isAbove(
+      r2Received,
+      240_000_000,
+      "Recipient 2 should receive ~49.5%"
+    );
     assert.isAbove(protocolReceived, 4_000_000, "Protocol should receive ~1%");
 
     const totalDistributed = r1Received + r2Received + protocolReceived;
-    assert.equal(totalDistributed, Number(testAmount), "Total should match input amount");
+    assert.equal(
+      totalDistributed,
+      Number(testAmount),
+      "Total should match input amount"
+    );
 
     console.log("✅ ATOMIC BUNDLING WORKS!");
     console.log("   Both transfer and split executed in ONE transaction\n");
@@ -638,5 +776,302 @@ describe("cascadepay E2E Tests", () => {
 
     console.log("✅ All SDK methods verified!\n");
     console.log("🎉 TRANSACTION BUNDLING FULLY TESTED AND WORKING!\n");
+  });
+
+  it("Test 8: Security - Reject malicious protocol ATA", async () => {
+    console.log(
+      "\n🔒 Testing security: Malicious protocol ATA should be rejected\n"
+    );
+
+    // Create attacker's ATA for the same mint
+    const attackerKeypair = await generateKeyPairSigner();
+    const attackerAddress = address(attackerKeypair.address);
+    console.log(`Attacker address: ${attackerAddress}`);
+
+    const attackerAta = await createATA(feePayer, mintAddress, attackerAddress);
+    console.log(`Attacker ATA: ${attackerAta}`);
+    console.log(`Legitimate protocol ATA: ${protocolAtaAddress}\n`);
+
+    // Fund vault
+    console.log("Funding vault with 1,000,000 tokens...");
+    await mintTokens(feePayer, mintAddress, vaultAtaAddress, 1000000n);
+    console.log("✓ Vault funded\n");
+
+    // Try to execute split with WRONG protocol ATA (attacker's ATA)
+    console.log("Attempting to execute split with malicious protocol ATA...");
+    try {
+      await program.methods
+        .executeSplit()
+        .accounts({
+          splitConfig: splitConfigPda,
+          vault: toPublicKey(vaultAtaAddress),
+          mint: toPublicKey(mintAddress),
+          executor: provider.wallet.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts([
+          {
+            pubkey: toPublicKey(recipient1AtaAddress),
+            isSigner: false,
+            isWritable: true,
+          },
+          {
+            pubkey: toPublicKey(recipient2AtaAddress),
+            isSigner: false,
+            isWritable: true,
+          },
+          // MALICIOUS: Pass attacker's ATA instead of protocol ATA
+          {
+            pubkey: toPublicKey(attackerAta),
+            isSigner: false,
+            isWritable: true,
+          },
+        ])
+        .rpc();
+
+      // If we reach here, the test failed
+      assert.fail("❌ SECURITY FAILURE: Malicious protocol ATA was accepted!");
+    } catch (error) {
+      // Verify it's the correct error
+      const errorString = error.toString();
+      console.log(`Error received: ${errorString}\n`);
+
+      assert.ok(
+        errorString.includes("InvalidProtocolFeeRecipient"),
+        `Expected InvalidProtocolFeeRecipient error, got: ${errorString}`
+      );
+
+      console.log(
+        "✅ Security test passed: Malicious protocol ATA correctly rejected!"
+      );
+      console.log("🔒 Protocol fees are secure - cannot be stolen!\n");
+    }
+
+    // Verify attacker ATA balance is still 0
+    const attackerBalance = await getTokenBalance(attackerAta);
+    assert.equal(attackerBalance, 0, "Attacker should have received 0 tokens");
+    console.log("✓ Attacker balance: 0 tokens (no theft occurred)\n");
+  });
+
+  it("Test 9: Protocol ATA missing - graceful degradation", async () => {
+    console.log("\n🧪 Test 9: Protocol ATA doesn't exist - graceful handling\n");
+
+    // Create a NEW token mint (fresh token without protocol ATA)
+    console.log("Creating new test token...");
+    const newMintAddress = await createMint(feePayer, 6);
+    console.log(`✓ New mint created: ${newMintAddress}\n`);
+
+    // Create recipient ATAs for new token
+    console.log("Creating recipient ATAs for new token...");
+    const newR1Ata = await createATA(
+      feePayer,
+      newMintAddress,
+      recipient1Signer.address
+    );
+    const newR2Ata = await createATA(
+      feePayer,
+      newMintAddress,
+      recipient2Signer.address
+    );
+    console.log(`✓ Recipient ATAs created\n`);
+
+    // Create split config for new token
+    console.log("Creating split config for new token...");
+    const recipients = [
+      {
+        address: toPublicKey(recipient1Signer.address),
+        percentageBps: 4950,
+      },
+      {
+        address: toPublicKey(recipient2Signer.address),
+        percentageBps: 4950,
+      },
+    ];
+
+    const newMintPubkey = toPublicKey(newMintAddress);
+    const [newConfigPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("split_config"),
+        provider.wallet.publicKey.toBuffer(),
+        newMintPubkey.toBuffer(),
+      ],
+      program.programId
+    );
+
+    const [newVaultAta] = await findAssociatedTokenPda({
+      mint: newMintAddress,
+      owner: toAddress(newConfigPda),
+      tokenProgram: TOKEN_PROGRAM_ADDRESS,
+    });
+
+    await program.methods
+      .createSplitConfig(newMintPubkey, recipients)
+      .accounts({
+        splitConfig: newConfigPda,
+        vault: toPublicKey(newVaultAta),
+        mint: newMintPubkey,
+        authority: provider.wallet.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .remainingAccounts([
+        {
+          pubkey: toPublicKey(newR1Ata),
+          isSigner: false,
+          isWritable: false,
+        },
+        {
+          pubkey: toPublicKey(newR2Ata),
+          isSigner: false,
+          isWritable: false,
+        },
+      ])
+      .rpc();
+    console.log("✓ Split config created\n");
+
+    // Derive protocol ATA address (but DON'T create it yet)
+    const [newProtocolAta] = await findAssociatedTokenPda({
+      mint: newMintAddress,
+      owner: PROTOCOL_WALLET,
+      tokenProgram: TOKEN_PROGRAM_ADDRESS,
+    });
+    console.log(`Protocol ATA address: ${newProtocolAta}`);
+    console.log("⚠️  Protocol ATA does NOT exist yet\n");
+
+    // Fund vault
+    console.log("Funding vault with 1,000 tokens...");
+    await mintTokens(feePayer, newMintAddress, newVaultAta, 1000000000n);
+    const vaultBefore = await getTokenBalance(newVaultAta);
+    console.log(`✓ Vault funded: ${vaultBefore} tokens\n`);
+
+    // Execute split WITHOUT protocol ATA existing
+    console.log(
+      "Executing split (protocol ATA doesn't exist - should be graceful)..."
+    );
+    await program.methods
+      .executeSplit()
+      .accounts({
+        splitConfig: newConfigPda,
+        vault: toPublicKey(newVaultAta),
+        mint: newMintPubkey,
+        executor: provider.wallet.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts([
+        {
+          pubkey: toPublicKey(newR1Ata),
+          isSigner: false,
+          isWritable: true,
+        },
+        {
+          pubkey: toPublicKey(newR2Ata),
+          isSigner: false,
+          isWritable: true,
+        },
+        // Pass non-existent protocol ATA
+        {
+          pubkey: toPublicKey(newProtocolAta),
+          isSigner: false,
+          isWritable: true,
+        },
+      ])
+      .rpc();
+    console.log("✅ Split executed successfully (graceful degradation)\n");
+
+    // Wait for balance updates
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Verify balances
+    const r1Balance = await getTokenBalance(newR1Ata);
+    const r2Balance = await getTokenBalance(newR2Ata);
+    const vaultAfter = await getTokenBalance(newVaultAta);
+
+    console.log("📊 Results after first split:");
+    console.log(`  - Recipient 1: ${r1Balance} tokens (expected: ~495M)`);
+    console.log(`  - Recipient 2: ${r2Balance} tokens (expected: ~495M)`);
+    console.log(`  - Vault: ${vaultAfter} tokens (expected: ~10M protocol fee)`);
+
+    // Assertions: recipients got their shares
+    assert.isAbove(
+      Number(r1Balance),
+      490_000_000,
+      "Recipient 1 should receive ~49.5%"
+    );
+    assert.isAbove(
+      Number(r2Balance),
+      490_000_000,
+      "Recipient 2 should receive ~49.5%"
+    );
+    // Protocol fee should remain in vault
+    assert.isAbove(
+      Number(vaultAfter),
+      9_000_000,
+      "Protocol fee should remain in vault"
+    );
+    console.log(
+      "✅ Recipients received shares, protocol fee stayed in vault\n"
+    );
+
+    // Now create the protocol ATA
+    console.log("Creating protocol ATA...");
+    await createATA(feePayer, newMintAddress, PROTOCOL_WALLET);
+    console.log("✓ Protocol ATA created\n");
+
+    // Execute split again - protocol should receive fees now
+    console.log("Re-executing split (protocol ATA now exists)...");
+    await program.methods
+      .executeSplit()
+      .accounts({
+        splitConfig: newConfigPda,
+        vault: toPublicKey(newVaultAta),
+        mint: newMintPubkey,
+        executor: provider.wallet.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts([
+        {
+          pubkey: toPublicKey(newR1Ata),
+          isSigner: false,
+          isWritable: true,
+        },
+        {
+          pubkey: toPublicKey(newR2Ata),
+          isSigner: false,
+          isWritable: true,
+        },
+        {
+          pubkey: toPublicKey(newProtocolAta),
+          isSigner: false,
+          isWritable: true,
+        },
+      ])
+      .rpc();
+    console.log("✅ Split executed\n");
+
+    // Wait for balance updates
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Verify protocol received the accumulated fees
+    const protocolBalance = await getTokenBalance(newProtocolAta);
+    const vaultFinal = await getTokenBalance(newVaultAta);
+
+    console.log("📊 Final results:");
+    console.log(`  - Protocol: ${protocolBalance} tokens`);
+    console.log(`  - Vault: ${vaultFinal} tokens (should be 0)\n`);
+
+    // Second split distributes the ~10M that was in vault:
+    // 99% goes to recipients again, 1% to protocol
+    // So protocol gets ~100K (1% of 10M)
+    assert.isAbove(
+      Number(protocolBalance),
+      90_000,
+      "Protocol should have received ~1% of remaining vault"
+    );
+    assert.equal(Number(vaultFinal), 0, "Vault should be empty");
+
+    console.log(
+      "✅ GRACEFUL DEGRADATION WORKS! Protocol claimed fees after ATA creation\n"
+    );
   });
 });

@@ -18,7 +18,7 @@ graph LR
 
 **Program ID:** [`Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2`](https://solscan.io/account/Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2?cluster=devnet)
 
-**Protocol Fee Wallet:** [`Fo2EYEYbnJTnBnbAgnjnG1c2fixpFn1vSUUHSeoHhRP`](https://solscan.io/account/Fo2EYEYbnJTnBnbAgnjnG1c2fixpFn1vSUUHSeoHhRP?cluster=devnet)
+**Protocol Fee Wallet:** [`2zMEvEkyQKTRjiGkwYPXjPsJUp8eR1rVjoYQ7PzVVZnP`](https://solscan.io/account/2zMEvEkyQKTRjiGkwYPXjPsJUp8eR1rVjoYQ7PzVVZnP)
 
 **Network:** Solana Devnet
 **Framework:** Anchor 0.32.1
@@ -249,7 +249,10 @@ pnpm install
 anchor build
 
 # Run tests on devnet
-anchor test --skip-local-validator
+anchor test
+
+# Or skip build/deploy if already deployed
+anchor test --skip-build --skip-deploy
 ```
 
 ### Deploy

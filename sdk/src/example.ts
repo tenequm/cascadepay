@@ -17,26 +17,29 @@ async function main() {
   console.log("🚀 cascadepay SDK Example\n");
 
   // Setup
-  const connection = new anchor.web3.Connection("https://api.devnet.solana.com", "confirmed");
+  const connection = new anchor.web3.Connection(
+    "https://api.devnet.solana.com",
+    "confirmed"
+  );
   const wallet = new anchor.Wallet(anchor.web3.Keypair.generate()); // Replace with actual wallet
 
   // Load program ID and IDL
-  const programId = new anchor.web3.PublicKey("Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2"); // cascadepay devnet
+  const programId = new anchor.web3.PublicKey(
+    "Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2"
+  ); // cascadepay devnet
   const idlPath = join(__dirname, "../../target/idl/cascadepay.json");
   const idl = JSON.parse(readFileSync(idlPath, "utf-8"));
 
-  const sdk = await createCascadepayClient(
-    connection,
-    wallet,
-    idl
-  );
+  const sdk = await createCascadepayClient(connection, wallet, idl);
 
   console.log("✅ SDK initialized");
   console.log(`   Program ID: ${programId.toString()}`);
   console.log(`   Wallet: ${wallet.publicKey.toString()}\n`);
 
   // Example mint (Devnet USDC)
-  const USDC_MINT = new anchor.web3.PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+  const USDC_MINT = new anchor.web3.PublicKey(
+    "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+  );
 
   // ============================================================================
   // Example 1: Create split configuration (99% total for recipients)
@@ -46,7 +49,7 @@ async function main() {
 
   const recipients = [
     { address: new anchor.web3.PublicKey("Alice..."), percentageBps: 5900 }, // 59%
-    { address: new anchor.web3.PublicKey("Bob..."), percentageBps: 3000 },   // 30%
+    { address: new anchor.web3.PublicKey("Bob..."), percentageBps: 3000 }, // 30%
     { address: new anchor.web3.PublicKey("Charlie..."), percentageBps: 1000 }, // 10%
   ]; // Total: 9900 bps = 99% (protocol gets 1%)
 
@@ -78,7 +81,9 @@ async function main() {
 
     console.log("📊 Example 2: Executing payment split\n");
     console.log("   Waiting for funds in vault...");
-    console.log("   (In production, wait for actual payment before executing)\n");
+    console.log(
+      "   (In production, wait for actual payment before executing)\n"
+    );
 
     // Drains vault and distributes to recipients
     const tx = await sdk.executeSplit(configPDA);
@@ -140,7 +145,6 @@ async function main() {
       // bundledTx.feePayer = wallet.publicKey;
       // await wallet.signTransaction(bundledTx);
       // await connection.sendRawTransaction(bundledTx.serialize());
-
     } else {
       console.log("ℹ️  Regular payment address, no split\n");
     }
@@ -166,7 +170,7 @@ async function main() {
 
     const newRecipients = [
       { address: new anchor.web3.PublicKey("Alice..."), percentageBps: 4950 }, // 49.5%
-      { address: new anchor.web3.PublicKey("Bob..."), percentageBps: 4950 },   // 49.5%
+      { address: new anchor.web3.PublicKey("Bob..."), percentageBps: 4950 }, // 49.5%
     ]; // Total: 9900 bps = 99%
 
     try {
@@ -195,7 +199,6 @@ async function main() {
       console.log("⚠️  Close failed:", err.message);
       console.log("   (Vault must be empty and no unclaimed funds)\n");
     }
-
   } catch (error) {
     const err = error as Error & { logs?: string[] };
     console.error("\n❌ Error:", err.message);
