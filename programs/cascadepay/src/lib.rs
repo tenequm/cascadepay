@@ -8,6 +8,16 @@ use anchor_spl::{
 
 declare_id!("Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2");
 
+// Security contact information (embedded on-chain)
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "CascadePay",
+    project_url: "https://cascadepay.io",
+    contacts: "email:hello@cascadepay.io,link:https://github.com/tenequm/cascadepay/security",
+    policy: "https://github.com/tenequm/cascadepay/blob/main/SECURITY.md",
+    source_code: "https://github.com/tenequm/cascadepay"
+}
+
 // Protocol wallet for mainnet (receives 1% fee)
 pub const PROTOCOL_WALLET: Pubkey = pubkey!("2zMEvEkyQKTRjiGkwYPXjPsJUp8eR1rVjoYQ7PzVVZnP");
 pub const PROTOCOL_FEE_BPS: u16 = 100;         // 1% = 100 basis points

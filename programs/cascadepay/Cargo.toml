@@ -28,6 +28,7 @@ custom-panic = []
 [dependencies]
 anchor-lang = "0.32.1"
 anchor-spl = "0.32.1"
+solana-security-txt = "1.1.1"
 
 
 [lints.rust]

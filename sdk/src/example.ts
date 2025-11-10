@@ -18,7 +18,7 @@ async function main() {
 
   // Setup
   const connection = new anchor.web3.Connection(
-    "https://api.devnet.solana.com",
+    "https://api.mainnet-beta.solana.com",
     "confirmed"
   );
   const wallet = new anchor.Wallet(anchor.web3.Keypair.generate()); // Replace with actual wallet
@@ -26,7 +26,7 @@ async function main() {
   // Load program ID and IDL
   const programId = new anchor.web3.PublicKey(
     "Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2"
-  ); // cascadepay devnet
+  ); // cascadepay mainnet
   const idlPath = join(__dirname, "../../target/idl/cascadepay.json");
   const idl = JSON.parse(readFileSync(idlPath, "utf-8"));
 
@@ -36,9 +36,9 @@ async function main() {
   console.log(`   Program ID: ${programId.toString()}`);
   console.log(`   Wallet: ${wallet.publicKey.toString()}\n`);
 
-  // Example mint (Devnet USDC)
+  // Example mint (Mainnet USDC)
   const USDC_MINT = new anchor.web3.PublicKey(
-    "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
   );
 
   // ============================================================================

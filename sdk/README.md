@@ -15,7 +15,7 @@ import { createCascadepayClient, IDL } from "@cascadepay/sdk";
 import * as anchor from "@coral-xyz/anchor";
 
 // Initialize
-const connection = new anchor.web3.Connection("https://api.devnet.solana.com");
+const connection = new anchor.web3.Connection("https://api.mainnet-beta.solana.com");
 const wallet = new anchor.Wallet(yourKeypair);
 
 const sdk = await createCascadepayClient(connection, wallet, IDL);

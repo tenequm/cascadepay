@@ -29,7 +29,7 @@ async function facilitatorFlow() {
 
   // Setup connection (facilitator's RPC)
   const connection = new anchor.web3.Connection(
-    "https://api.devnet.solana.com",
+    "https://api.mainnet-beta.solana.com",
     "confirmed"
   );
 
@@ -58,8 +58,8 @@ async function facilitatorFlow() {
     destination: new anchor.web3.PublicKey("VAULT_ADDRESS_HERE"), // User wants to pay this
     amount: 5_000_000n, // 5 USDC (6 decimals)
     token: new anchor.web3.PublicKey(
-      "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
-    ), // USDC devnet
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    ), // USDC mainnet
   };
 
   console.log("Payment request:");
@@ -189,7 +189,7 @@ async function facilitatorFlow() {
 
     console.log(`🔗 View on Solana Explorer:`);
     console.log(
-      `   https://explorer.solana.com/tx/${signature}?cluster=devnet\n`
+      `   https://explorer.solana.com/tx/${signature}\n`
     );
   } catch (error) {
     const err = error as Error;
