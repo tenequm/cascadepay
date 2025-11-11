@@ -18,8 +18,8 @@ cascadepay = "Bi1y2G3hteJwbeQk7QAW9Uk7Qq2h9bPbDYhPCKSuE2W2"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "mainnet"
-wallet = "~/.cascadepay-mainnet/deployer.json"
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "pnpm exec ts-mocha -p ./tsconfig.json -t 1000000 'tests/**/*.ts'"
