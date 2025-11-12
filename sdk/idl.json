@@ -339,10 +339,6 @@
           "name": "mint"
         },
         {
-          "name": "protocol_fee_recipient",
-          "writable": true
-        },
-        {
           "name": "executor"
         },
         {
@@ -599,16 +595,21 @@
     },
     {
       "code": 6017,
-      "name": "InvalidProtocolFeeAccount",
-      "msg": "Protocol fee recipient has wrong mint"
+      "name": "MissingProtocolAccount",
+      "msg": "Protocol fee account was not provided in remaining_accounts"
     },
     {
       "code": 6018,
+      "name": "InvalidProtocolFeeRecipient",
+      "msg": "Protocol fee recipient must be the designated protocol wallet ATA"
+    },
+    {
+      "code": 6019,
       "name": "NothingToClaim",
       "msg": "Recipient has no unclaimed funds to claim"
     },
     {
-      "code": 6019,
+      "code": 6020,
       "name": "UnclaimedFundsExist",
       "msg": "Config still has unclaimed funds - cannot close"
     }

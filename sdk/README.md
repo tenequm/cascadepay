@@ -39,6 +39,53 @@ console.log("Payment vault:", config.vault.toString());
 await sdk.executeSplit(configPDA);
 ```
 
+## Dual-Format Compatibility
+
+The SDK accepts **both Web3.js/Anchor format AND @solana/kit format** for maximum compatibility!
+
+### With Web3.js/Anchor (traditional)
+```typescript
+import { Connection, PublicKey } from '@solana/web3.js';
+import { createCascadepayClient, IDL } from '@cascadepay/sdk';
+
+const connection = new Connection("https://api.mainnet-beta.solana.com");
+const mint = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+
+const sdk = await createCascadepayClient(connection, wallet, IDL);
+const pda = await sdk.createSplitConfig({ mint, recipients });
+```
+
+### With @solana/kit (modern)
+```typescript
+import { address } from '@solana/kit';
+import { createCascadepayClient, IDL } from '@cascadepay/sdk';
+
+const rpcUrl = "https://api.mainnet-beta.solana.com";
+const mint = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+
+const sdk = await createCascadepayClient(rpcUrl, wallet, IDL);
+const pda = await sdk.createSplitConfig({ mint, recipients });
+```
+
+### Or even simpler with plain strings
+```typescript
+const sdk = await createCascadepayClient(
+  "https://api.mainnet-beta.solana.com",
+  wallet,
+  IDL
+);
+
+await sdk.createSplitConfig({
+  mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  recipients: [
+    { address: "Platform...", percentageBps: 900 },
+    { address: "Merchant...", percentageBps: 9000 },
+  ],
+});
+```
+
+**All three work!** The SDK automatically handles format conversion internally.
+
 ## API Reference
 
 ### `createCascadepayClient()`

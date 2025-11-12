@@ -3,6 +3,8 @@
 target
 **/*.rs.bk
 test-ledger
+tmp
+.next
 
 # Node
 node_modules
