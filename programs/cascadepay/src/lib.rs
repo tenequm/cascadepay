@@ -19,7 +19,8 @@ solana_security_txt::security_txt! {
     project_url: "https://cascadepay.io",
     contacts: "email:hello@cascadepay.io,link:https://github.com/tenequm/cascadepay/security",
     policy: "https://github.com/tenequm/cascadepay/blob/main/SECURITY.md",
-    source_code: "https://github.com/tenequm/cascadepay"
+    source_code: "https://github.com/tenequm/cascadepay",
+    source_release: "v0.1.0"
 }
 
 #[program]
