@@ -686,6 +686,14 @@ export class Cascadepay {
       data: Buffer.from(transferIxKit.data),
     });
 
+    // Fix: @solana-program/token requires TransactionSigner to set signer role,
+    // but we only have the address. Mark token authority as signer explicitly.
+    for (const key of transferIx.keys) {
+      if (key.pubkey.equals(payerPubkey)) {
+        key.isSigner = true;
+      }
+    }
+
     // Build execute split instruction
     const executeSplitIx = await this.buildExecuteSplitInstruction(
       pda,

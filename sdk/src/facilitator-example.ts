@@ -188,9 +188,7 @@ async function facilitatorFlow() {
     console.log("  4. ✅ Protocol fee collected\n");
 
     console.log(`🔗 View on Solana Explorer:`);
-    console.log(
-      `   https://explorer.solana.com/tx/${signature}\n`
-    );
+    console.log(`   https://explorer.solana.com/tx/${signature}\n`);
   } catch (error) {
     const err = error as Error;
     console.error("❌ Transaction failed:", err.message);

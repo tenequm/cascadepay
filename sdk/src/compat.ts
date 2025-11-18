@@ -62,9 +62,7 @@ export function toConnection(input: ConnectionLike): anchor.web3.Connection {
   }
 
   if (typeof input !== "string") {
-    throw new Error(
-      "Connection must be Connection instance or RPC URL string"
-    );
+    throw new Error("Connection must be Connection instance or RPC URL string");
   }
 
   // Create Connection from URL string

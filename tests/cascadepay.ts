@@ -50,9 +50,13 @@ describe("cascadepay E2E Tests", () => {
 
   // Modern Solana RPC clients
   const rpcUrl = provider.connection.rpcEndpoint;
-  const wsUrl = rpcUrl
-    .replace("https://", "wss://")
-    .replace("http://", "ws://");
+  let wsUrl = rpcUrl.replace("https://", "wss://").replace("http://", "ws://");
+
+  // Local validator uses port 8900 for WebSocket, not 8899
+  if (wsUrl.includes("127.0.0.1:8899") || wsUrl.includes("localhost:8899")) {
+    wsUrl = wsUrl.replace(":8899", ":8900");
+  }
+
   const rpc = createSolanaRpc(rpcUrl);
 
   // Create these lazily to avoid WebSocket connection issues during module load
@@ -225,6 +229,13 @@ describe("cascadepay E2E Tests", () => {
       programId: toPublicKey(transferIxKit.programAddress),
       data: Buffer.from(transferIxKit.data),
     });
+
+    // Fix: Mark authority as signer (same issue as SDK)
+    for (const key of transferIx.keys) {
+      if (key.pubkey.equals(provider.wallet.publicKey)) {
+        key.isSigner = true;
+      }
+    }
 
     const tx = new anchor.web3.Transaction().add(transferIx);
     await provider.sendAndConfirm(tx);
@@ -651,6 +662,9 @@ describe("cascadepay E2E Tests", () => {
     console.log(`✅ Bundled transaction confirmed!`);
     console.log(`   Signature: ${signature}\n`);
 
+    // Wait for balance updates to propagate
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     // Verify balances after
     console.log("Verifying atomic execution results...");
     const r1After = await getTokenBalance(recipient1AtaAddress);
@@ -854,7 +868,9 @@ describe("cascadepay E2E Tests", () => {
   });
 
   it("Test 9: Protocol ATA missing - graceful degradation", async () => {
-    console.log("\n🧪 Test 9: Protocol ATA doesn't exist - graceful handling\n");
+    console.log(
+      "\n🧪 Test 9: Protocol ATA doesn't exist - graceful handling\n"
+    );
 
     // Create a NEW token mint (fresh token without protocol ATA)
     console.log("Creating new test token...");
@@ -990,7 +1006,9 @@ describe("cascadepay E2E Tests", () => {
     console.log("📊 Results after first split:");
     console.log(`  - Recipient 1: ${r1Balance} tokens (expected: ~495M)`);
     console.log(`  - Recipient 2: ${r2Balance} tokens (expected: ~495M)`);
-    console.log(`  - Vault: ${vaultAfter} tokens (expected: ~10M protocol fee)`);
+    console.log(
+      `  - Vault: ${vaultAfter} tokens (expected: ~10M protocol fee)`
+    );
 
     // Assertions: recipients got their shares
     assert.isAbove(

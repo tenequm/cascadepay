@@ -1,5 +1,6 @@
 {
   "license": "ISC",
+  "type": "module",
   "scripts": {
     "lint:fix": "prettier */*.ts \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.ts \"*/**/*{.js,.ts}\" --check"
