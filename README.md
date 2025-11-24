@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> ## 🚀 This project has moved!
+> **Active development continues at [cascade-protocol/splits](https://github.com/cascade-protocol/splits)**
+>
+> This repository is kept for historical reference. Please visit the new repo for the latest code, SDK, and documentation.
+
 # cascadepay
 
 **One payment in. Multiple recipients out. Automatically.**
